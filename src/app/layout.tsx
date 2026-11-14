@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "How to Win Junction — Strategy Desk",
-  description: "Research-backed Junction project strategies, reviewed and approved by your team.",
+  title: "Chilly — Your Up-to-date Assistant",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
