@@ -10,7 +10,7 @@ import {
   type WatchHit,
 } from "@/lib/agent-store";
 import { sendTelegram } from "@/lib/notify";
-import { recordWatchRun, reserveExa, settleExa } from "@/lib/usage";
+import { recordWatchRun, reserveExa, settleExa, snapshot } from "@/lib/usage";
 
 export type WatchRunResult =
   | { ok: true; hits: WatchHit[]; costUsd: number | null; checkedSince: string }
@@ -48,7 +48,12 @@ export async function runWatch(
     return { ok: true, hits: [hit], costUsd: 0, checkedSince: watch.lastCheckedAt };
   }
 
-  const blocked = reserveExa(`watch:${id}`, { background: true });
+  const useDeep = watch.everyMinutes >= 60;
+  const limits = snapshot().limits;
+  const reservation = useDeep
+    ? Math.max(limits.exaEstimateUsd, limits.exaDeepEstimateUsd)
+    : limits.exaEstimateUsd;
+  const blocked = reserveExa(`watch:${id}`, { background: true, estimateUsd: reservation });
   if (blocked) {
     console.log(`[butler] watch ${id.slice(0, 8)} blocked: ${blocked}`);
     return { ok: false, error: blocked, blocked: true };
@@ -61,20 +66,26 @@ export async function runWatch(
     const response = await getExaClient().search(
       watch.query,
       {
-        type: "auto",
+        type: useDeep ? "deep" : "auto",
         numResults: 5,
         startPublishedDate: since,
         // Fetch page contents at check time instead of relying on Exa's cached copy.
         contents: { highlights: { maxCharacters: 400 }, maxAgeHours: 0 },
       },
-      { timeout: 20_000 },
+      { timeout: useDeep ? 60_000 : 20_000 },
     );
     const cost = response.costDollars?.total ?? null;
-    settleExa(`watch:${id}`, cost ?? undefined);
+    settleExa(`watch:${id}`, cost ?? undefined, reservation);
     recordWatchRun();
 
     const seen = new Set(watch.seenUrls);
-    const hits: WatchHit[] = response.results
+    const resultItems = response.results as Array<{
+      title: string | null;
+      url: string;
+      highlights?: string[];
+      publishedDate?: string;
+    }>;
+    const hits: WatchHit[] = resultItems
       .filter((r) => !seen.has(r.url))
       .map((r) => ({
         title: r.title || r.url,
@@ -90,7 +101,7 @@ export async function runWatch(
       null,
     );
     console.log(
-      `[butler] watch ${id.slice(0, 8)} (${reason}) "${watch.query}": ${hits.length} new in ${Date.now() - startedAt}ms, $${cost ?? "?"}`,
+      `[butler] watch ${id.slice(0, 8)} (${reason}, ${useDeep ? "deep" : "auto"}) "${watch.query}": ${hits.length} new in ${Date.now() - startedAt}ms, $${cost ?? "?"}`,
     );
 
     if (hits.length > 0 && watch.notifyTelegram) {
@@ -104,7 +115,7 @@ export async function runWatch(
     }
     return { ok: true, hits, costUsd: cost, checkedSince: since };
   } catch (error) {
-    settleExa(`watch:${id}`, 0);
+    settleExa(`watch:${id}`, 0, reservation);
     const message = error instanceof Error ? error.message : "Search failed.";
     await recordWatchRunRow(watch, [], watch.seenUrls, null, message).catch(() => {});
     console.log(`[butler] watch ${id.slice(0, 8)} failed: ${message}`);

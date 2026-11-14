@@ -123,7 +123,7 @@ export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskA
                   <span className={`live-dot ${live ? "" : "is-off"}`} />
                   <div className="watch-main">
                     <b>
-                      {w.reason} {w.demoMode && <span className="demo-watch-badge">DEMO</span>}
+                      {w.reason} {w.demoMode ? <span className="demo-watch-badge">DEMO</span> : w.everyMinutes >= 60 && <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>}
                     </b>
                     <small>
                       <code>{w.query}</code>

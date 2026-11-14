@@ -28,6 +28,7 @@ import {
   type Progress,
   type Clarification,
   type PageImport,
+  type AgentTurn,
   taskInputSchema,
   type GeminiOutput,
   type SavedTask,
@@ -322,11 +323,12 @@ export type DraftResponse = (
       followUpQueries: string[];
       droppedCitations: number;
       droppedLinks: number;
-      agentConversation: { role: "strategist" | "challenger"; message: string }[];
+      agentConversation: AgentTurn[];
     }
 ) & {
   shouldOfferLiveUpdates: boolean;
   liveUpdateReason: string;
+  agentReviewNote: string;
   sources: SourceRef[];
   model: string;
   durationMs: number;
@@ -499,7 +501,7 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
   const challengeChosen = hasChallengeChoice(input);
 
   const cacheKey = createHash("sha256")
-    .update(`live-update-choice-v1-agents-v2\n${today()}\n${prompt}`)
+    .update(`live-update-choice-v1-agents-v4-parallel-judge\n${today()}\n${prompt}`)
     .digest("hex");
   const cached = fromCache(draftCache, cacheKey);
   if (cached) {
@@ -524,61 +526,112 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
   );
   const attempt = { count: 0 };
   try {
-    const first = await generateWithFallback(
-      apiKey,
-      { system, prompt },
-      attempt,
-      geminiOutputSchema,
-    );
-    let object = first.object;
-    let tokens = first.tokens;
-    let model = first.model;
-    let agentConversation: { role: "strategist" | "challenger"; message: string }[] = [];
-    if (object.kind === "result") {
-      const finalDraftSchema = geminiOutputSchema.extend({ kind: z.literal("result") });
-      const challengerSchema = z.object({
-        critique: z.string().min(1).max(900),
-        revised: finalDraftSchema,
-      });
-      const challengerPrompt = [
-        "A Strategist proposed the draft below. Act as a rigorous, constructive Challenger.",
-        "Find the most important weakness involving the user's stated goal, missing evidence, factual support, practicality, or unclear next steps. Do not manufacture objections.",
-        "Return one concise critique in the user's language, then produce a revised final draft. Keep supported citations and remove unsupported claims.",
-        `User request and evidence:\n${prompt}`,
-        `Strategist proposal:\n${JSON.stringify(object)}`,
-      ].join("\n\n");
-      const challenged = await generateWithFallback(
-        apiKey,
-        { system, prompt: challengerPrompt },
-        attempt,
-        challengerSchema,
-      );
-      const strategistMessage = [
-        object.title,
-        object.summary,
-        object.recommendation ? `Recommendation: ${object.recommendation}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-        .slice(0, 900);
-      object = challenged.object.revised;
-      tokens = {
-        input: tokens.input + challenged.tokens.input,
-        output: tokens.output + challenged.tokens.output,
-      };
-      agentConversation = [
-        { role: "strategist", message: strategistMessage },
+    let object: GeminiOutput;
+    let tokens = { input: 0, output: 0 };
+    let model: string;
+    let agentConversation: AgentTurn[] = [];
+    const dailyUsage = snapshot();
+    const agentSlotsAvailable = dailyUsage.day.geminiCalls + 3 <= dailyUsage.limits.geminiDailyCalls;
+    const needsChallengeChoice = competitionStrategy && !challengeChosen && !mustFinish;
+    const runParallelReview = !needsChallengeChoice && agentSlotsAvailable;
+
+    if (runParallelReview) {
+      const peerSchema = z.object({ contribution: z.string().min(1).max(1400) });
+      const peers = [
         {
-          role: "challenger",
-          message:
-            `${challenged.object.critique}\n\nRevision: ${challenged.object.revised.summary}`.slice(
-              0,
-              1200,
-            ),
+          role: "strategist" as const,
+          label: "Strategist",
+          focus: "Independently develop the strongest evidence-grounded answer for the user's goal, with practical choices and next steps.",
+        },
+        {
+          role: "challenger" as const,
+          label: "Challenger",
+          focus: "Independently analyze the same task and evidence. Find a credible alternative, challenge the weakest assumption, and identify important risks or missing information. Do not refer to or assume knowledge of another agent's proposal.",
         },
       ];
-      model = `${first.model} + ${challenged.model}`;
+      type Peer = (typeof peers)[number];
+      type PeerResponse = {
+        object: { contribution: string };
+        model: string;
+        tokens: { input: number; output: number };
+      };
+      type PeerOutcome =
+        | { peer: Peer; response: PeerResponse; attempts: number }
+        | { peer: Peer; error: unknown; attempts: number };
+      const peerOutcomes: PeerOutcome[] = await Promise.all(
+        peers.map(async (peer): Promise<PeerOutcome> => {
+          const peerAttempt = { count: 0 };
+          try {
+            const response = await generateWithFallback(
+              apiKey,
+              {
+                system: `${system}\n\nYou are the ${peer.label}. Work independently from the other agents. Do not write the user's final plan. Ground factual statements in the numbered evidence, cite them inline as [n], distinguish recommendations from facts, and keep your contribution concise.`,
+                prompt: `${prompt}\n\nYour independent assignment: ${peer.focus}`,
+              },
+              peerAttempt,
+              peerSchema,
+            );
+            return { peer, response, attempts: peerAttempt.count };
+          } catch (error) {
+            return { peer, error, attempts: peerAttempt.count };
+          }
+        }),
+      );
+      attempt.count += peerOutcomes.reduce((sum, item) => sum + item.attempts, 0);
+      const peerFailure = peerOutcomes.find((item) => "error" in item);
+      if (peerFailure && "error" in peerFailure) throw peerFailure.error;
+      const completedPeers = peerOutcomes.filter(
+        (item): item is Extract<PeerOutcome, { response: PeerResponse }> => "response" in item,
+      );
+      const judgeSchema = z.object({
+        decision: z.string().min(1).max(900),
+        draft: geminiOutputSchema,
+      });
+      const judgePrompt = [
+        "You are Chilly's Judge. The Strategist and Challenger independently analyzed the same user task and evidence in parallel.",
+        "Compare their proposals, resolve disagreements using the user's goal and the numbered evidence, and create the final structured response. Do not automatically favor either agent. If key user-specific information is still missing, use kind=clarify; otherwise use kind=result.",
+        "In decision, explain what you accepted, rejected or combined, and why. Cite factual claims in the final result using the evidence numbers.",
+        `User task and evidence:\n${prompt}`,
+        ...completedPeers.map(({ peer, response }) => `${peer.label}:\n${response.object.contribution}`),
+      ].join("\n\n");
+      const judgeAttempt = { count: 0 };
+      try {
+        const judged = await generateWithFallback(
+          apiKey,
+          { system, prompt: judgePrompt },
+          judgeAttempt,
+          judgeSchema,
+        );
+        object = judged.object.draft;
+        tokens.input += judged.tokens.input;
+        tokens.output += judged.tokens.output;
+        model = [...completedPeers.map((item) => item.response.model), judged.model].join(" + ");
+        agentConversation = [
+          ...completedPeers.map(({ peer, response }) => ({
+            role: peer.role,
+            message: response.object.contribution,
+          })),
+          { role: "judge", message: judged.object.decision },
+        ];
+      } finally {
+        attempt.count += judgeAttempt.count;
+      }
+      for (const item of completedPeers) {
+        tokens.input += item.response.tokens.input;
+        tokens.output += item.response.tokens.output;
+      }
+    } else {
+      const single = await generateWithFallback(
+        apiKey,
+        { system, prompt },
+        attempt,
+        geminiOutputSchema,
+      );
+      object = single.object;
+      tokens = single.tokens;
+      model = single.model;
     }
+
     recordGemini(input.taskId, attempt.count, tokens.input, tokens.output);
     const durationMs = Date.now() - startedAt;
     console.log(
@@ -595,6 +648,9 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
       shouldOfferLiveUpdates: object.shouldOfferLiveUpdates,
       liveUpdateReason: object.shouldOfferLiveUpdates
         ? object.liveUpdateReason.trim().slice(0, 240)
+        : "",
+      agentReviewNote: !needsChallengeChoice && !agentSlotsAvailable
+        ? "Parallel review skipped because the daily Gemini budget has fewer than three calls available."
         : "",
     };
 

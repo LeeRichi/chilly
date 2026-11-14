@@ -105,6 +105,7 @@ export async function executeApproved(
 
   // 1. Background watches
   const limits = getLimits();
+  const telegramConnected = integrationStatus().telegram.connected;
   let active = await countActiveWatches().catch(() => 0);
   for (const i of [...new Set(parsed.data.watches)]) {
     const w = result.watches[i];
@@ -137,7 +138,7 @@ export async function executeApproved(
       everyMinutes,
       demoMode,
       until: safeUntil,
-      notifyTelegram: parsed.data.telegram,
+      notifyTelegram: telegramConnected,
       seenUrls: task.sources.map((s) => s.url),
     });
     active += 1;

@@ -211,6 +211,15 @@ export default function Home() {
             startedAt: Date.now(),
             turns: response.agentConversation,
           });
+        else if (response.agentReviewNote)
+          add({
+            id: newId(),
+            kind: "agents",
+            status: "done",
+            startedAt: Date.now(),
+            turns: [],
+            note: response.agentReviewNote,
+          });
         add({ id: newId(), kind: "result", status: "waiting", startedAt: Date.now(), response });
       }
       return;
@@ -225,6 +234,15 @@ export default function Home() {
         status: "done",
         startedAt: Date.now(),
         turns: response.agentConversation,
+      });
+    else if (response.agentReviewNote)
+      add({
+        id: newId(),
+        kind: "agents",
+        status: "done",
+        startedAt: Date.now(),
+        turns: [],
+        note: response.agentReviewNote,
       });
     add({ id: newId(), kind: "result", status: "waiting", startedAt: Date.now(), response });
   }
@@ -584,7 +602,7 @@ export default function Home() {
                 <PepperIcon className="feature-pepper" />
                 <span>Plans that update as new information comes in</span>
                 <span className="feature-badges">
-                  <b className="exa-badge">EXA</b>
+                  <b className="exa-badge">EXA DEEP</b>
                 </span>
               </li>
               <li>

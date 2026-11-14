@@ -1550,18 +1550,11 @@ h1 em {
 }
 .agent-message-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 10px;
-  max-width: 90%;
-}
-.agent-message-row.is-strategist {
+  width: 100%;
+  max-width: 100%;
   justify-self: start;
-  margin-right: 10%;
-}
-.agent-message-row.is-challenger {
-  flex-direction: row-reverse;
-  justify-self: end;
-  margin-left: 10%;
 }
 .agent-avatar {
   position: relative;
@@ -1590,6 +1583,20 @@ h1 em {
     inset 0 1px 0 #ffd0a122;
   transform: rotate(5deg) translateY(2px);
 }
+.agent-avatar.is-judge {
+  border-color: #397086;
+  background: radial-gradient(circle at 32% 22%, #255a6d, #142b34 70%);
+  box-shadow: 0 5px 12px #0007, inset 0 1px 0 #b6edff28;
+  transform: rotate(2deg) translateY(-1px);
+}
+.agent-avatar.is-demo_judge {
+  border-color: #925a38;
+  background: radial-gradient(circle at 32% 22%, #593b2a, #211710 70%);
+  box-shadow:
+    0 5px 12px #0007,
+    inset 0 1px 0 #ffd0a122;
+  transform: rotate(5deg) translateY(2px);
+}
 .agent-avatar svg {
   display: block;
   width: 41px;
@@ -1598,39 +1605,45 @@ h1 em {
 }
 .agent-message-bubble {
   position: relative;
+  flex: 1;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid #3b472a;
-  border-radius: 11px 11px 11px 4px;
+  border-radius: 11px;
   background: linear-gradient(145deg, #202719, #171a13 78%);
   box-shadow: 0 5px 15px #0002;
 }
-.agent-message-row.is-strategist .agent-message-bubble::before,
-.agent-message-row.is-challenger .agent-message-bubble::before {
+.agent-message-bubble::before {
   position: absolute;
-  bottom: 8px;
+  top: 17px;
+  left: -5px;
   width: 8px;
   height: 8px;
   border-bottom: 1px solid #3b472a;
+  border-left: 1px solid #3b472a;
   background: #1d2317;
   content: "";
   transform: rotate(45deg);
 }
-.agent-message-row.is-strategist .agent-message-bubble::before {
-  left: -5px;
-  border-left: 1px solid #3b472a;
-}
-.agent-message-row.is-challenger .agent-message-bubble {
+.agent-message-row.is-challenger .agent-message-bubble,
+.agent-message-row.is-builder .agent-message-bubble,
+.agent-message-row.is-demo_judge .agent-message-bubble {
   border-color: #68452f;
-  border-radius: 11px 11px 4px 11px;
   background: linear-gradient(145deg, #281d15, #1b1712 78%);
 }
-.agent-message-row.is-challenger .agent-message-bubble::before {
-  right: -5px;
+.agent-message-row.is-challenger .agent-message-bubble::before,
+.agent-message-row.is-builder .agent-message-bubble::before,
+.agent-message-row.is-demo_judge .agent-message-bubble::before {
   border-color: #68452f;
   background: #241a13;
-  border-top: 1px solid #68452f;
-  border-right: 1px solid #68452f;
+}
+.agent-message-row.is-judge .agent-message-bubble {
+  border-color: #315e70;
+  background: linear-gradient(145deg, #17252b, #12191d 78%);
+}
+.agent-message-row.is-judge .agent-message-bubble::before {
+  border-color: #315e70;
+  background: #17252b;
 }
 .agent-turn-role {
   font:
@@ -1639,8 +1652,13 @@ h1 em {
   letter-spacing: 0.06em;
   color: var(--lime);
 }
-.agent-message-row.is-challenger .agent-turn-role {
+.agent-message-row.is-challenger .agent-turn-role,
+.agent-message-row.is-demo_judge .agent-turn-role,
+.agent-message-row.is-builder .agent-turn-role {
   color: #e0aa70;
+}
+.agent-message-row.is-judge .agent-turn-role {
+  color: #8ed9f0;
 }
 .agent-message-bubble p {
   margin: 5px 0 0;
@@ -1652,15 +1670,6 @@ h1 em {
 @media (max-width: 560px) {
   .agent-conversation {
     padding: 11px;
-  }
-  .agent-message-row {
-    max-width: 100%;
-  }
-  .agent-message-row.is-strategist {
-    margin-right: 5%;
-  }
-  .agent-message-row.is-challenger {
-    margin-left: 5%;
   }
   .agent-avatar {
     flex-basis: 40px;
@@ -2499,8 +2508,9 @@ a.approve-button {
   cursor: pointer;
 }
 .watch-heading input {
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
+  margin: 0;
   accent-color: var(--lime);
   flex: none;
 }
@@ -2540,6 +2550,11 @@ a.approve-button {
     11px/1.5 var(--font-geist-mono),
     monospace;
   overflow-wrap: anywhere;
+}
+.watch-notify-note {
+  color: #aeb49e;
+  font-size: 10px;
+  line-height: 1.5;
 }
 .watch-window {
   display: grid;
@@ -3093,6 +3108,12 @@ a.approve-button {
   letter-spacing: 0.5px;
   vertical-align: middle;
 }
+.exa-deep-watch-badge {
+  margin: 0;
+  padding: 2px 4px;
+  font-size: 7px;
+  letter-spacing: .25px;
+}
 .demo-hit-badge {
   margin-right: 6px;
 }
@@ -3106,23 +3127,33 @@ a.approve-button {
 @media (max-width: 850px) {
   .sidebar {
     justify-content: space-between;
-    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    height: 60px;
+    padding: 0 clamp(12px, 3vw, 20px);
+    gap: clamp(6px, 2vw, 14px);
+    background: rgba(12, 13, 12, 0.96);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 8px 24px #0005;
   }
   .sidebar .brand {
-    flex: none;
+    flex: 0 0 auto;
   }
   .sidebar .nav-item {
     display: flex;
     flex: none;
     width: auto;
-    height: 34px;
+    min-width: 36px;
+    height: 36px;
     margin: 0;
-    padding: 0 8px;
+    padding: 0 10px;
     gap: 6px;
     font-size: 10px;
     white-space: nowrap;
+    border-radius: 6px;
   }
   .sidebar .nav-item.active {
+    background: #1a1d15;
     box-shadow: inset 0 -2px var(--lime);
   }
   .sidebar > .usage-card {
@@ -3134,8 +3165,8 @@ a.approve-button {
 }
 @media (max-width: 420px) {
   .sidebar {
-    padding-right: 12px;
-    padding-left: 12px;
+    padding-right: 10px;
+    padding-left: 10px;
     gap: 4px;
   }
   .brand-copy span {
@@ -3148,6 +3179,7 @@ a.approve-button {
     font-size: 13px;
   }
   .sidebar .nav-item {
+    height: 34px;
     padding: 0 5px;
     gap: 4px;
     font-size: 9px;
@@ -3162,6 +3194,42 @@ a.approve-button {
   padding-top: 17px;
   border-top: 1px solid #2b2d26;
 }
+.comparison-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: #a9ad9f;
+  text-align: left;
+  font:
+    700 9px var(--font-geist-mono),
+    monospace;
+  letter-spacing: 0.7px;
+  cursor: pointer;
+}
+.comparison-toggle:hover {
+  color: #e0e2d8;
+}
+.comparison-toggle-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.comparison-chevron {
+  color: #777c70;
+}
+.comparison-summary {
+  overflow: hidden;
+  color: #777c70;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .direct-gemini-button,
 .direct-gemini-retry {
   display: inline-flex;
@@ -3172,23 +3240,38 @@ a.approve-button {
   background: #151711;
   color: #c7c9bf;
   padding: 8px 10px;
-  font: 10px var(--font-geist-mono), monospace;
+  font:
+    10px var(--font-geist-mono),
+    monospace;
   cursor: pointer;
 }
 .direct-gemini-button:hover,
-.direct-gemini-retry:hover { border-color: #5270ff; color: #fff; }
-.direct-gemini-button .gemini-badge { margin: 0; }
-.direct-gemini-arrow { color: #85897c; }
+.direct-gemini-retry:hover {
+  border-color: #5270ff;
+  color: #fff;
+}
+.direct-gemini-button .gemini-badge {
+  margin: 0;
+}
+.direct-gemini-arrow {
+  color: #85897c;
+}
 .comparison-vs {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 17px 0 12px;
   color: #7d8176;
-  font: 700 9px var(--font-geist-mono), monospace;
+  font:
+    700 9px var(--font-geist-mono),
+    monospace;
   letter-spacing: 1px;
 }
-.comparison-vs i { height: 1px; flex: 1; background: #2b2d26; }
+.comparison-vs i {
+  height: 1px;
+  flex: 1;
+  background: #2b2d26;
+}
 .comparison-card {
   min-width: 0;
   max-height: 420px;
@@ -3218,7 +3301,9 @@ a.approve-button {
   border: 1px solid #34372e;
   border-radius: 4px;
   color: #8a8d82;
-  font: 7px var(--font-geist-mono), monospace;
+  font:
+    7px var(--font-geist-mono),
+    monospace;
 }
 .comparison-model {
   margin: 11px 0 6px;
@@ -3255,9 +3340,21 @@ a.approve-button {
 .comparison-error {
   color: #f29a82;
 }
-.direct-gemini-error { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.direct-gemini-error .comparison-error { margin: 0; }
-.direct-gemini-retry { padding: 6px 8px; font-size: 9px; }
+.direct-gemini-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.direct-gemini-error .comparison-error {
+  margin: 0;
+}
+.direct-gemini-retry {
+  padding: 6px 8px;
+  font-size: 9px;
+}
 @media (max-width: 560px) {
-  .comparison-card { max-height: 360px; }
+  .comparison-card {
+    max-height: 360px;
+  }
 }

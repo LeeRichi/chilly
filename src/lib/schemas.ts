@@ -160,6 +160,18 @@ export const sourceRefSchema = z.object({
 export type SourceRef = z.infer<typeof sourceRefSchema>;
 
 const cited = z.array(z.number().int());
+export const agentRoleSchema = z.enum([
+  "strategist",
+  "challenger",
+  "judge",
+  "challenge_fit",
+  "builder",
+  "demo_judge",
+  "orchestrator",
+]);
+export const agentTurnSchema = z.object({ role: agentRoleSchema, message: z.string() });
+export type AgentRole = z.infer<typeof agentRoleSchema>;
+export type AgentTurn = z.infer<typeof agentTurnSchema>;
 
 export const taskResultSchema = z.object({
   title: z.string(),
@@ -209,9 +221,7 @@ export const taskResultSchema = z.object({
       }),
     )
     .default([]),
-  agentConversation: z
-    .array(z.object({ role: z.enum(["strategist", "challenger"]), message: z.string() }))
-    .default([]),
+  agentConversation: z.array(agentTurnSchema).default([]),
   freshness: z
     .object({
       status: z.enum(["checked", "failed"]),
@@ -237,6 +247,7 @@ export const approvalSchema = z.object({
     .default({}),
   /** Demo mode triggers one clearly labeled simulated news update instead of calling Exa. */
   watchModes: z.record(z.string().regex(/^\d{1,2}$/), z.enum(["real", "demo"])).default({}),
+  /** Send the one-time plan summary on approval; selected watches notify Telegram independently. */
   telegram: z.boolean(),
   /** Telegram reminders before each dated timeline step / reminder action. */
   reminders: z.boolean().default(false),

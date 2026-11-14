@@ -10,6 +10,9 @@ recommendations.
   direct Gemini answer side by side. The Gemini baseline does not search the web; Chilly uses Exa
   evidence before drafting its plan.
 - Shows sources, findings, options, recommendations, and next steps in a reviewable result.
+- Runs a Strategist and a Challenger independently in parallel on the same Exa evidence, then has a
+  Judge resolve disagreements into one plan. Tasks that still need clarification are clarified
+  first.
 - Lets the user approve a plan before saving it to PostgreSQL or carrying out selected actions.
 - Tracks task progress, watches for relevant changes, and can send approved reminders through
   Telegram.
@@ -126,8 +129,9 @@ page content no older than `BUTLER_EXA_MAX_AGE_HOURS` (24 hours by default).
 
 Search and drafting are read-only. Chilly validates the plan again on the server when it is approved.
 Only then can it save the task and carry out the actions selected by the user. Calendar steps are
-downloaded as an `.ics` file; Telegram reminders and watches require an active connection and the
-user's approval.
+downloaded as an `.ics` file. Watches and reminders require the user's approval; Telegram alerts
+require an active connection. Selecting a watch opts into Telegram alerts for new updates when
+Telegram is connected. The separate Telegram option sends only the one-time plan summary.
 
 ## Limits and optional settings
 

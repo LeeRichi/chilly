@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ClarifyQuestion, DraftResponse, SearchOutcome } from "@/app/actions";
 import Link from "next/link";
-import type { Clarification, PageImport, Progress } from "@/lib/schemas";
+import type { AgentRole, AgentTurn, Clarification, PageImport, Progress } from "@/lib/schemas";
 import { ResultView, type SourceFocus } from "./result-view";
 import { ImportPanel } from "./import-panel";
 import type { ExecutedAction } from "@/app/agent-actions";
@@ -57,7 +57,7 @@ export type Step = Base &
         answered?: Clarification[];
       }
     | { kind: "import"; page: PageImport }
-    | { kind: "agents"; turns: { role: "strategist" | "challenger"; message: string }[] }
+  | { kind: "agents"; turns: AgentTurn[]; note?: string }
     | {
         kind: "result";
         response: ResultResponse;
@@ -100,7 +100,7 @@ const formatDuration = (ms: number) =>
   ms < 1000 ? `took ${ms}ms` : `took ${(ms / 1000).toFixed(1)}s`;
 
 /** Finished research steps fold into a one-line title; these stay open. */
-const ALWAYS_OPEN: Step["kind"][] = ["task", "agents", "result", "saved", "execute"];
+const ALWAYS_OPEN: Step["kind"][] = ["task", "result", "saved", "execute"];
 
 function StepShell({
   step,
@@ -114,14 +114,14 @@ function StepShell({
   children?: ReactNode;
 }) {
   const collapsible = !ALWAYS_OPEN.includes(step.kind) && !!children;
-  const [open, setOpen] = useState(step.status !== "done");
+  const [open, setOpen] = useState(step.status !== "done" || step.kind === "agents");
   const ref = useRef<HTMLLIElement>(null);
 
   // Fold automatically when a step finishes; unfold if it fails or needs input.
   const [lastStatus, setLastStatus] = useState(step.status);
   if (lastStatus !== step.status) {
     setLastStatus(step.status);
-    setOpen(step.status !== "done");
+    setOpen(step.status !== "done" || step.kind === "agents");
   }
 
   // A citation click elsewhere asks the step holding that source card to unfold.
@@ -655,12 +655,25 @@ function ResultCard({
                     <span className="watch-heading-copy">
                       <span className="watch-live-label">
                         <i />{" "}
-                        {sel.watchModes[i] === "demo" ? "DEMO SIMULATION" : "LIVE UPDATES · EXA"}
+                        {sel.watchModes[i] === "demo" ? "DEMO SIMULATION" : "LIVE UPDATES"}
+                        {sel.watchModes[i] !== "demo" && (
+                          <>
+                            <span>· EXA</span>
+                            {sel.watchIntervals[i] >= 60 && <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>}
+                          </>
+                        )}
                       </span>
                       <strong>{w.reason}</strong>
                     </span>
                   </label>
                   <div className="watch-query">{w.query}</div>
+                  <div className="watch-notify-note">
+                    {!sel.watches.includes(i)
+                      ? "Updates are off until this watch is selected"
+                      : tgOk
+                      ? `New matching updates will be sent to Telegram · ${integrations?.telegram.chatName}`
+                      : "New updates will appear in the saved task · connect Telegram for alerts"}
+                  </div>
                   <div className="watch-demo-control">
                     <span>Demo mode</span>
                     <button
@@ -722,7 +735,9 @@ function ResultCard({
                           </button>
                         ))}
                       </div>
-                      <small>Exa fresh-fetches new pages at this interval · ~$0.01 per check</small>
+                      <small>
+                        {sel.watchIntervals[i] >= 60 ? "Exa Deep" : "Exa Auto"} fresh-fetches new pages at this interval · ~$0.02 per check
+                      </small>
                     </div>
                   )}
                 </div>
@@ -732,10 +747,10 @@ function ResultCard({
                 checked={sel.telegram}
                 disabled={!tgOk || saved}
                 onChange={(v) => setSel((s) => ({ ...s, telegram: v }))}
-                label="Notify me on Telegram"
+                label="Send this one-time plan summary on Telegram"
                 detail={
                   tgOk
-                    ? `Summary now, plus any watch updates · ${integrations?.telegram.chatName}`
+                    ? `One message after approval · ${integrations?.telegram.chatName}`
                     : "Connect Telegram in the sidebar first"
                 }
                 cost="free"
@@ -826,16 +841,15 @@ function AgentConversationStep({ step }: { step: Extract<Step, { kind: "agents" 
       <section className="agent-conversation" aria-label="Multi-agent conversation">
         <div className="agent-conversation-heading">
           <span className="block-label">MULTI-AGENT REVIEW</span>
-          <span>STRATEGIST ↔ CHALLENGER</span>
+          <span>{step.turns.some((turn) => turn.role === "judge") ? "STRATEGIST ∥ CHALLENGER → JUDGE" : "STRATEGIST ↔ CHALLENGER"}</span>
         </div>
         <div className="agent-chat-thread">
+          {step.note && <p className="tl-reason">{step.note}</p>}
           {step.turns.map((turn) => (
             <div className={`agent-message-row is-${turn.role}`} key={turn.role}>
               <AgentAvatar role={turn.role} />
               <div className="agent-message-bubble">
-                <span className="agent-turn-role">
-                  {turn.role === "strategist" ? "STRATEGIST · PROPOSAL" : "CHALLENGER · REVIEW"}
-                </span>
+                <span className="agent-turn-role">{agentRoleLabel(turn.role)}</span>
                 <p>{turn.message}</p>
               </div>
             </div>
@@ -846,22 +860,39 @@ function AgentConversationStep({ step }: { step: Extract<Step, { kind: "agents" 
   );
 }
 
-function AgentAvatar({ role }: { role: "strategist" | "challenger" }) {
-  const challenger = role === "challenger";
-  const prefix = challenger ? "challenger" : "strategist";
+function agentRoleLabel(role: AgentRole) {
+  const labels: Record<AgentRole, string> = {
+    strategist: "STRATEGIST · PROPOSAL",
+    challenger: "CHALLENGER · REVIEW",
+    judge: "JUDGE · FINAL DECISION",
+    challenge_fit: "CHALLENGE FIT ANALYST",
+    builder: "MVP BUILDER",
+    demo_judge: "DEMO JUDGE",
+    orchestrator: "ORCHESTRATOR · DECISION",
+  };
+  return labels[role];
+}
+
+function AgentAvatar({ role }: { role: AgentRole }) {
+  const palette = role === "judge"
+    ? { shellStart: "#b6edff", shellMid: "#4a8da5", shellEnd: "#234b5b", antenna: "#78d8f2", antennaGlow: "#b1efff", side: "#315f70", shellStroke: "#71c3db", eye: "#b2efff", mouth: "#78d8f2", mouthPath: "M27 40h10" }
+    : role === "challenger" || role === "demo_judge" || role === "builder"
+      ? { shellStart: "#ffc27e", shellMid: "#b9713f", shellEnd: "#603c2c", antenna: "#ed9a5c", antennaGlow: "#ffb174", side: "#8e5238", shellStroke: "#d58b5c", eye: "#ffbd83", mouth: "#f29a66", mouthPath: "M27 40h10" }
+      : { shellStart: "#efff9b", shellMid: "#8fa63b", shellEnd: "#465625", antenna: "#d9f578", antennaGlow: "#e5ff87", side: "#687b31", shellStroke: "#d9ef8b", eye: "#e2ff79", mouth: "#b7d95b", mouthPath: "M28 40h8" };
+  const prefix = role;
 
   return (
     <span
       className={`agent-avatar is-${role}`}
       role="img"
-      aria-label={challenger ? "Challenger bot" : "Strategist bot"}
+      aria-label={`${agentRoleLabel(role).toLowerCase()} agent`}
     >
       <svg viewBox="0 0 64 64" aria-hidden="true">
         <defs>
           <linearGradient id={`${prefix}-shell`} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stopColor={challenger ? "#ffc27e" : "#efff9b"} />
-            <stop offset="0.48" stopColor={challenger ? "#b9713f" : "#8fa63b"} />
-            <stop offset="1" stopColor={challenger ? "#603c2c" : "#465625"} />
+            <stop offset="0" stopColor={palette.shellStart} />
+            <stop offset="0.48" stopColor={palette.shellMid} />
+            <stop offset="1" stopColor={palette.shellEnd} />
           </linearGradient>
           <linearGradient id={`${prefix}-visor`} x1="0" x2="0.9" y1="0" y2="1">
             <stop offset="0" stopColor="#303c36" />
@@ -876,18 +907,18 @@ function AgentAvatar({ role }: { role: "strategist" | "challenger" }) {
           <path
             d="M32 14V9"
             fill="none"
-            stroke={challenger ? "#ed9a5c" : "#d9f578"}
+            stroke={palette.antenna}
             strokeLinecap="round"
             strokeWidth="3"
           />
-          <circle cx="32" cy="7" r="3.5" fill={challenger ? "#ffb174" : "#e5ff87"} />
+          <circle cx="32" cy="7" r="3.5" fill={palette.antennaGlow} />
           <rect
             x="7"
             y="27"
             width="8"
             height="17"
             rx="4"
-            fill={challenger ? "#8e5238" : "#687b31"}
+            fill={palette.side}
           />
           <rect
             x="49"
@@ -895,7 +926,7 @@ function AgentAvatar({ role }: { role: "strategist" | "challenger" }) {
             width="8"
             height="17"
             rx="4"
-            fill={challenger ? "#8e5238" : "#687b31"}
+            fill={palette.side}
           />
           <rect
             x="12"
@@ -904,7 +935,7 @@ function AgentAvatar({ role }: { role: "strategist" | "challenger" }) {
             height="39"
             rx="14"
             fill={`url(#${prefix}-shell)`}
-            stroke={challenger ? "#d58b5c" : "#d9ef8b"}
+            stroke={palette.shellStroke}
             strokeOpacity="0.75"
           />
           <path
@@ -913,11 +944,11 @@ function AgentAvatar({ role }: { role: "strategist" | "challenger" }) {
             opacity="0.15"
           />
           <rect x="17" y="25" width="30" height="19" rx="8" fill={`url(#${prefix}-visor)`} />
-          <circle cx="25" cy="34" r="2.7" fill={challenger ? "#ffbd83" : "#e2ff79"} />
-          <circle cx="39" cy="34" r="2.7" fill={challenger ? "#ffbd83" : "#e2ff79"} />
+          <circle cx="25" cy="34" r="2.7" fill={palette.eye} />
+          <circle cx="39" cy="34" r="2.7" fill={palette.eye} />
           <path
-            d={challenger ? "M27 40h10" : "M28 40h8"}
-            stroke={challenger ? "#f29a66" : "#b7d95b"}
+            d={palette.mouthPath}
+            stroke={palette.mouth}
             strokeLinecap="round"
             strokeWidth="1.8"
           />
