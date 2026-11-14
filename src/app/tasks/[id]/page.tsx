@@ -6,6 +6,7 @@ import { getTaskActivity } from "@/app/agent-actions";
 import { AgentPanel } from "@/components/agent-panel";
 import { SavedTaskView } from "@/components/saved-task-view";
 import { Sidebar } from "@/components/sidebar";
+import { WorkspaceNav } from "@/components/workspace-nav";
 import { DeleteTaskButton } from "@/components/delete-task-button";
 import { getTask } from "@/lib/tasks";
 
@@ -20,11 +21,7 @@ export default function TaskPage({ params }: { params: Promise<{ id: string }> }
           <div className="breadcrumb">
             <Link href="/tasks">SAVED TASKS</Link> <span>/</span> TASK
           </div>
-          <div className="topbar-right">
-            <Link className="ghost-button" href="/">
-              ＋ New task
-            </Link>
-          </div>
+          <div className="topbar-right"><WorkspaceNav current="tasks" /></div>
         </header>
         <div className="content">
           <Suspense

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Sidebar } from "@/components/sidebar";
+import { WorkspaceNav } from "@/components/workspace-nav";
 import { DeleteTaskButton } from "@/components/delete-task-button";
 import { listTasks, type StoredTask } from "@/lib/tasks";
 
@@ -14,11 +15,7 @@ export default function TasksPage() {
           <div className="breadcrumb">
             WORKSPACE <span>/</span> SAVED TASKS
           </div>
-          <div className="topbar-right">
-            <Link className="ghost-button" href="/">
-              ＋ New task
-            </Link>
-          </div>
+          <div className="topbar-right"><WorkspaceNav current="tasks" /></div>
         </header>
         <div className="content">
           <div className="eyebrow">

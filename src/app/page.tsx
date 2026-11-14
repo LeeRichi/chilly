@@ -15,6 +15,7 @@ import {
 import { executeApproved, getIntegrations, type ExecutedAction } from "./agent-actions";
 import { Timeline, type ResultResponse, type Selection, type Step } from "@/components/timeline";
 import { Sidebar } from "@/components/sidebar";
+import { WorkspaceNav } from "@/components/workspace-nav";
 import { PepperIcon } from "@/components/pepper-icon";
 import { downloadIcs } from "@/lib/ics";
 import { ComparisonPanel, type ComparisonState } from "@/components/comparison-panel";
@@ -573,6 +574,7 @@ export default function Home() {
           <div className="breadcrumb">
             WORKSPACE <span>/</span> NEW TASK
           </div>
+          <div className="topbar-right"><WorkspaceNav current="home" /></div>
         </header>
         <div className="content">
           <section className="landing-section" aria-label="Chilly introduction">
