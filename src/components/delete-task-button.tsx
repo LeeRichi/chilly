@@ -4,7 +4,13 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteSavedTaskAction } from "@/app/agent-actions";
 
-export function DeleteTaskButton({ taskId, redirectOnDelete = false }: { taskId: string; redirectOnDelete?: boolean }) {
+export function DeleteTaskButton({
+  taskId,
+  redirectOnDelete = false,
+}: {
+  taskId: string;
+  redirectOnDelete?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -29,23 +35,80 @@ export function DeleteTaskButton({ taskId, redirectOnDelete = false }: { taskId:
   return (
     <>
       <span className="delete-task-wrap">
-        <button className="delete-task-button" type="button" aria-label="Delete task" title="Delete task" onClick={() => setConfirming(true)} disabled={busy}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" /></svg>
+        <button
+          className="delete-task-button"
+          type="button"
+          aria-label="Delete task"
+          title="Delete task"
+          onClick={() => setConfirming(true)}
+          disabled={busy}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+          </svg>
         </button>
-        {error && <small className="delete-task-error" role="alert">{error}</small>}
+        {error && (
+          <small className="delete-task-error" role="alert">
+            {error}
+          </small>
+        )}
       </span>
-      {confirming && <div className="delete-modal-backdrop" onKeyDown={(e) => { if (e.key === "Escape" && !busy) setConfirming(false); }} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setConfirming(false); }}>
-        <section className="delete-modal" role="dialog" aria-modal="true" aria-labelledby={`${dialogId}-title`} aria-describedby={`${dialogId}-copy`}>
-          <span className="delete-modal-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" /></svg></span>
-          <h2 id={`${dialogId}-title`}>Delete this task?</h2>
-          <p id={`${dialogId}-copy`}>This also removes its progress, watch history, and scheduled reminders. This can’t be undone.</p>
-          {error && <p className="delete-modal-error" role="alert">{error}</p>}
-          <div className="delete-modal-actions">
-            <button type="button" className="ghost-button" onClick={() => { setConfirming(false); setError(""); }} disabled={busy}>Cancel</button>
-            <button type="button" className="confirm-delete-button" onClick={() => void remove()} disabled={busy}>{busy ? "Deleting…" : "Delete task"}</button>
-          </div>
-        </section>
-      </div>}
+      {confirming && (
+        <div
+          className="delete-modal-backdrop"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && !busy) setConfirming(false);
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !busy) setConfirming(false);
+          }}
+        >
+          <section
+            className="delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${dialogId}-title`}
+            aria-describedby={`${dialogId}-copy`}
+          >
+            <span className="delete-modal-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 13h11l1-13M9 7V4h6v3" />
+              </svg>
+            </span>
+            <h2 id={`${dialogId}-title`}>Delete this task?</h2>
+            <p id={`${dialogId}-copy`}>
+              This also removes its progress, watch history, and scheduled reminders. This can’t be
+              undone.
+            </p>
+            {error && (
+              <p className="delete-modal-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="delete-modal-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setConfirming(false);
+                  setError("");
+                }}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="confirm-delete-button"
+                onClick={() => void remove()}
+                disabled={busy}
+              >
+                {busy ? "Deleting…" : "Delete task"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </>
   );
 }

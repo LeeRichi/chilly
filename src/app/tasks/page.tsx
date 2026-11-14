@@ -11,14 +11,33 @@ export default function TasksPage() {
       <Sidebar />
       <section className="main-column">
         <header className="topbar">
-          <div className="breadcrumb">WORKSPACE <span>/</span> SAVED TASKS</div>
-          <div className="topbar-right"><Link className="ghost-button" href="/">＋ New task</Link></div>
+          <div className="breadcrumb">
+            WORKSPACE <span>/</span> SAVED TASKS
+          </div>
+          <div className="topbar-right">
+            <Link className="ghost-button" href="/">
+              ＋ New task
+            </Link>
+          </div>
         </header>
         <div className="content">
-          <div className="eyebrow"><span className="eyebrow-line" /> STORED IN AIVEN POSTGRESQL <span className="eyebrow-line" /></div>
-          <h1>Your <em>handled</em> tasks.</h1>
-          <p className="intro">Everything you approved, with its sources. Open one to tick things off.</p>
-          <Suspense fallback={<div className="empty-state"><span className="spinner" /> LOADING YOUR TASKS…</div>}>
+          <div className="eyebrow">
+            <span className="eyebrow-line" /> STORED IN AIVEN POSTGRESQL{" "}
+            <span className="eyebrow-line" />
+          </div>
+          <h1>
+            Your <em>handled</em> tasks.
+          </h1>
+          <p className="intro">
+            Everything you approved, with its sources. Open one to tick things off.
+          </p>
+          <Suspense
+            fallback={
+              <div className="empty-state">
+                <span className="spinner" /> LOADING YOUR TASKS…
+              </div>
+            }
+          >
             <TaskList />
           </Suspense>
         </div>
@@ -28,7 +47,11 @@ export default function TasksPage() {
 }
 
 function progressOf(task: StoredTask) {
-  const total = task.result.nextActions.reduce((sum, a) => sum + (a.type === "checklist" ? a.content.split("\n").filter((l) => l.trim()).length : 0), 0);
+  const total = task.result.nextActions.reduce(
+    (sum, a) =>
+      sum + (a.type === "checklist" ? a.content.split("\n").filter((l) => l.trim()).length : 0),
+    0,
+  );
   const done = Object.values(task.progress).filter(Boolean).length;
   return { total, done: Math.min(done, total) };
 }
@@ -39,11 +62,21 @@ async function TaskList() {
   try {
     tasks = await listTasks();
   } catch (error) {
-    return <div className="notice"><span>!</span>Couldn’t load saved tasks: {error instanceof Error ? error.message : "database error"}</div>;
+    return (
+      <div className="notice">
+        <span>!</span>Couldn’t load saved tasks:{" "}
+        {error instanceof Error ? error.message : "database error"}
+      </div>
+    );
   }
 
   if (tasks.length === 0) {
-    return <div className="empty-state"><span className="empty-orbit">✳</span><span>NOTHING SAVED YET · APPROVE A PLAN TO SEE IT HERE</span></div>;
+    return (
+      <div className="empty-state">
+        <span className="empty-orbit">✳</span>
+        <span>NOTHING SAVED YET · APPROVE A PLAN TO SEE IT HERE</span>
+      </div>
+    );
   }
 
   const ongoing = tasks.filter((task) => {
@@ -66,8 +99,13 @@ async function TaskList() {
 function TaskGroup({ title, tasks }: { title: string; tasks: StoredTask[] }) {
   return (
     <section className="task-group" aria-label={`${title} tasks`}>
-      <h2 className={`task-group-title ${title === "Done" ? "is-done" : "is-ongoing"}`}>{title}<span>{tasks.length}</span></h2>
-      {tasks.length === 0 ? <p className="task-group-empty">No {title.toLowerCase()} tasks.</p> : (
+      <h2 className={`task-group-title ${title === "Done" ? "is-done" : "is-ongoing"}`}>
+        {title}
+        <span>{tasks.length}</span>
+      </h2>
+      {tasks.length === 0 ? (
+        <p className="task-group-empty">No {title.toLowerCase()} tasks.</p>
+      ) : (
         <ul className="task-list">
           {tasks.map((task) => {
             const { total, done } = progressOf(task);
@@ -83,10 +121,21 @@ function TaskGroup({ title, tasks }: { title: string; tasks: StoredTask[] }) {
                         <span>{new Date(task.createdAt).toLocaleString()}</span>
                         <span>{task.sources.length} sources</span>
                         {calendar && <span>📅 calendar ready</span>}
-                        {total > 0 && <span>{done}/{total} done</span>}
+                        {total > 0 && (
+                          <span>
+                            {done}/{total} done
+                          </span>
+                        )}
                       </span>
                     </div>
-                    {total > 0 && <span className="task-ring" style={{ ["--p" as string]: `${(done / total) * 100}%` }}>{Math.round((done / total) * 100)}%</span>}
+                    {total > 0 && (
+                      <span
+                        className="task-ring"
+                        style={{ ["--p" as string]: `${(done / total) * 100}%` }}
+                      >
+                        {Math.round((done / total) * 100)}%
+                      </span>
+                    )}
                   </Link>
                   <DeleteTaskButton taskId={task.id} />
                 </div>

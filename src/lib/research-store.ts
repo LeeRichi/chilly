@@ -29,7 +29,10 @@ export function saveResearch(query: string, results: StoredResult[]): string {
 
 /** Most recent stored results, newest first (diagnostics only). */
 export function latestResearch(limit: number): StoredResult[] {
-  return [...store.values()].reverse().flatMap((entry) => entry.results).slice(0, limit);
+  return [...store.values()]
+    .reverse()
+    .flatMap((entry) => entry.results)
+    .slice(0, limit);
 }
 
 export function loadResearch(ids: string[]): StoredResult[] {

@@ -96,6 +96,7 @@ export async function getTask(id: string): Promise<StoredTask | null> {
 
 export async function updateProgress(id: string, progress: Progress) {
   await ensureTable();
-  const rows = await getDb()`UPDATE tasks SET progress = ${getDb().json(progress)} WHERE id = ${id} RETURNING id`;
+  const rows =
+    await getDb()`UPDATE tasks SET progress = ${getDb().json(progress)} WHERE id = ${id} RETURNING id`;
   return rows.length > 0;
 }

@@ -1,10 +1,27 @@
 /** Offset (ms) of a time zone from UTC at a given instant. */
 function zoneOffset(instant: number, timeZone: string) {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      .formatToParts(new Date(instant)).map((p) => [p.type, p.value]),
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(new Date(instant))
+      .map((p) => [p.type, p.value]),
   );
-  const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  const asUtc = Date.UTC(
+    +parts.year,
+    +parts.month - 1,
+    +parts.day,
+    +parts.hour,
+    +parts.minute,
+    +parts.second,
+  );
   return asUtc - Math.floor(instant / 1000) * 1000;
 }
 
@@ -24,7 +41,18 @@ export function helsinkiLocalToDate(local: string, timeZone = "Europe/Helsinki")
 }
 
 export const helsinkiClock = (date: Date) =>
-  date.toLocaleTimeString("en-GB", { timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit" });
+  date.toLocaleTimeString("en-GB", {
+    timeZone: "Europe/Helsinki",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export const helsinkiDayTime = (date: Date) =>
-  date.toLocaleString("en-GB", { timeZone: "Europe/Helsinki", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  date.toLocaleString("en-GB", {
+    timeZone: "Europe/Helsinki",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });

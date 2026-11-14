@@ -15,7 +15,10 @@ export async function register() {
 
   const url = `http://127.0.0.1:${process.env.PORT || "3000"}/api/watches/tick`;
   const tick = () =>
-    void fetch(url, { method: "POST", headers: { "x-butler-tick": process.env.BUTLER_TICK_TOKEN! } }).catch(() => {});
+    void fetch(url, {
+      method: "POST",
+      headers: { "x-butler-tick": process.env.BUTLER_TICK_TOKEN! },
+    }).catch(() => {});
   g.__butlerTicker = setInterval(tick, 15 * 1000);
   setTimeout(tick, 20_000); // catch up shortly after start
   console.log("[butler] background scheduler started (reminders + watches, every 15 seconds)");

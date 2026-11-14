@@ -15,7 +15,7 @@ export function getLimits() {
   return {
     exaDailyUsd: num("BUTLER_EXA_DAILY_USD", 1),
     exaDailySearches: num("BUTLER_EXA_DAILY_SEARCHES", 60),
-    geminiDailyCalls: num("BUTLER_GEMINI_DAILY_CALLS", 40),
+    geminiDailyCalls: num("BUTLER_GEMINI_DAILY_CALLS", 120),
     taskMaxSearches: num("BUTLER_TASK_MAX_SEARCHES", 5),
     taskMaxDrafts: num("BUTLER_TASK_MAX_DRAFTS", 4),
     /** Assumed cost of one search before Exa tells us the real number. */
@@ -49,9 +49,20 @@ type Day = {
 type Ledger = { days: Record<string, Day> };
 
 const FILE = path.join(process.cwd(), ".butler", "usage.json");
-const emptyDay = (): Day => ({ exaUsd: 0, exaSearches: 0, exaCacheHits: 0, geminiCalls: 0, geminiCacheHits: 0, geminiInputTokens: 0, geminiOutputTokens: 0, telegramSent: 0, watchRuns: 0 });
+const emptyDay = (): Day => ({
+  exaUsd: 0,
+  exaSearches: 0,
+  exaCacheHits: 0,
+  geminiCalls: 0,
+  geminiCacheHits: 0,
+  geminiInputTokens: 0,
+  geminiOutputTokens: 0,
+  telegramSent: 0,
+  watchRuns: 0,
+});
 
-const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki" }).format(new Date());
+const today = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki" }).format(new Date());
 
 function load(): Ledger {
   try {
@@ -110,15 +121,21 @@ export function snapshot(taskId?: string): UsageSnapshot {
  * so parallel searches can't overshoot. Returns a human-readable reason when blocked.
  * Call settleExa() with the real cost afterwards.
  */
-export function reserveExa(taskId: string, opts: { background?: boolean; estimateUsd?: number } = {}): string | null {
+export function reserveExa(
+  taskId: string,
+  opts: { background?: boolean; estimateUsd?: number } = {},
+): string | null {
   const limits = getLimits();
   const { day } = snapshot();
   const task = taskCount(taskId);
   const estimateUsd = Math.max(0, opts.estimateUsd ?? limits.exaEstimateUsd);
   // Background watches run once per cadence, so only the daily limits apply to them.
-  if (!opts.background && task.searches >= limits.taskMaxSearches) return `This task already used its ${limits.taskMaxSearches} searches.`;
-  if (day.exaSearches >= limits.exaDailySearches) return `Daily Exa search limit reached (${limits.exaDailySearches}).`;
-  if (day.exaUsd + estimateUsd > limits.exaDailyUsd) return `Daily Exa budget reached ($${day.exaUsd.toFixed(3)} of $${limits.exaDailyUsd.toFixed(2)}).`;
+  if (!opts.background && task.searches >= limits.taskMaxSearches)
+    return `This task already used its ${limits.taskMaxSearches} searches.`;
+  if (day.exaSearches >= limits.exaDailySearches)
+    return `Daily Exa search limit reached (${limits.exaDailySearches}).`;
+  if (day.exaUsd + estimateUsd > limits.exaDailyUsd)
+    return `Daily Exa budget reached ($${day.exaUsd.toFixed(3)} of $${limits.exaDailyUsd.toFixed(2)}).`;
   task.searches += 1;
   task.exaUsd += estimateUsd;
   update((d) => {
@@ -129,7 +146,11 @@ export function reserveExa(taskId: string, opts: { background?: boolean; estimat
 }
 
 /** Replaces the reserved estimate with the real cost (0 if the search failed). */
-export function settleExa(taskId: string, actualUsd: number | undefined, estimate = getLimits().exaEstimateUsd) {
+export function settleExa(
+  taskId: string,
+  actualUsd: number | undefined,
+  estimate = getLimits().exaEstimateUsd,
+) {
   const delta = (actualUsd ?? estimate) - estimate;
   if (delta === 0) return;
   taskCount(taskId).exaUsd += delta;
@@ -143,8 +164,10 @@ export function recordExaCacheHit() {
 export function checkGemini(taskId: string): string | null {
   const limits = getLimits();
   const { day } = snapshot();
-  if (taskCount(taskId).drafts >= limits.taskMaxDrafts) return `This task already used its ${limits.taskMaxDrafts} AI drafts.`;
-  if (day.geminiCalls >= limits.geminiDailyCalls) return `Daily Gemini limit reached (${limits.geminiDailyCalls} calls).`;
+  if (taskCount(taskId).drafts >= limits.taskMaxDrafts)
+    return `This task already used its ${limits.taskMaxDrafts} AI drafts.`;
+  if (day.geminiCalls >= limits.geminiDailyCalls)
+    return `Daily Gemini limit reached (${limits.geminiDailyCalls} calls).`;
   return null;
 }
 
@@ -153,6 +176,16 @@ export function recordGemini(taskId: string, calls: number, inputTokens = 0, out
   const task = taskCount(taskId);
   task.drafts += 1;
   task.geminiTokens += inputTokens + outputTokens;
+  update((day) => {
+    day.geminiCalls += calls;
+    day.geminiInputTokens += inputTokens;
+    day.geminiOutputTokens += outputTokens;
+  });
+}
+
+/** Counts a direct comparison call without consuming one of the task's structured draft slots. */
+export function recordGeminiCall(taskId: string, calls: number, inputTokens = 0, outputTokens = 0) {
+  taskCount(taskId).geminiTokens += inputTokens + outputTokens;
   update((day) => {
     day.geminiCalls += calls;
     day.geminiInputTokens += inputTokens;

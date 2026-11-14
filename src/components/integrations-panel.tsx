@@ -24,15 +24,33 @@ export function IntegrationsPanel() {
     } else setMessage(res.error);
   }
 
-  if (!status) return <div className="usage-card"><span className="spinner" /> checking…</div>;
+  if (!status)
+    return (
+      <div className="usage-card">
+        <span className="spinner" /> checking…
+      </div>
+    );
   const { telegram } = status;
 
   return (
     <div className="usage-card integrations">
       <div className={`integ-row ${telegram.connected ? "is-on" : ""}`}>
         <span className="integ-dot" />
-        <span><b>Telegram</b><small>{telegram.connected ? `Connected · ${telegram.chatName}` : telegram.configured ? "Send /start to your bot, then connect" : `Add ${telegram.missing.join(" + ")}`}</small></span>
-        {telegram.configured && !telegram.connected && <button className="ghost-button" onClick={connect} disabled={connecting}>{connecting ? "…" : "Connect"}</button>}
+        <span>
+          <b>Telegram</b>
+          <small>
+            {telegram.connected
+              ? `Connected · ${telegram.chatName}`
+              : telegram.configured
+                ? "Send /start to your bot, then connect"
+                : `Add ${telegram.missing.join(" + ")}`}
+          </small>
+        </span>
+        {telegram.configured && !telegram.connected && (
+          <button className="ghost-button" onClick={connect} disabled={connecting}>
+            {connecting ? "…" : "Connect"}
+          </button>
+        )}
       </div>
       {message && <p className="usage-note">{message}</p>}
     </div>

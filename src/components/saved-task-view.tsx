@@ -24,12 +24,20 @@ export function SavedTaskView({ task }: { task: StoredTask }) {
     });
   }
 
-  const note = { idle: "Ticks are saved to this task.", saving: "Saving…", saved: "✓ Saved to Aiven", error: "Couldn’t save — try again." }[state];
+  const note = {
+    idle: "Ticks are saved to this task.",
+    saving: "Saving…",
+    saved: "✓ Saved to Aiven",
+    error: "Couldn’t save — try again.",
+  }[state];
 
   return (
     <article className="blueprint card-surface result-card">
       <div className="blueprint-top">
-        <div><span className="track-kicker">SAVED TASK</span><h2>{task.result.title}</h2></div>
+        <div>
+          <span className="track-kicker">SAVED TASK</span>
+          <h2>{task.result.title}</h2>
+        </div>
         <span className="draft-stamp">SAVED · {new Date(task.createdAt).toLocaleDateString()}</span>
       </div>
       <div className="blueprint-body">
@@ -37,10 +45,24 @@ export function SavedTaskView({ task }: { task: StoredTask }) {
           <span className="block-label">YOU ASKED</span>
           <p className="tl-prompt">“{task.prompt}”</p>
           {task.clarifications.length > 0 && (
-            <ul className="answer-list">{task.clarifications.map((c) => <li key={c.question}><span>{c.question}</span><b>{c.answer}</b></li>)}</ul>
+            <ul className="answer-list">
+              {task.clarifications.map((c) => (
+                <li key={c.question}>
+                  <span>{c.question}</span>
+                  <b>{c.answer}</b>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
-        <ResultView result={task.result} sources={task.sources} focus={{ active, setActive }} progress={progress} onToggle={toggle} progressNote={note} />
+        <ResultView
+          result={task.result}
+          sources={task.sources}
+          focus={{ active, setActive }}
+          progress={progress}
+          onToggle={toggle}
+          progressNote={note}
+        />
       </div>
     </article>
   );

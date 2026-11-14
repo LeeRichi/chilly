@@ -12,14 +12,28 @@ import { getTask } from "@/lib/tasks";
 export default function TaskPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <main className="app-shell">
-      <Sidebar />
+      <Suspense fallback={<aside className="sidebar" aria-hidden="true" />}>
+        <Sidebar />
+      </Suspense>
       <section className="main-column">
         <header className="topbar">
-          <div className="breadcrumb"><Link href="/tasks">SAVED TASKS</Link> <span>/</span> TASK</div>
-          <div className="topbar-right"><Link className="ghost-button" href="/">＋ New task</Link></div>
+          <div className="breadcrumb">
+            <Link href="/tasks">SAVED TASKS</Link> <span>/</span> TASK
+          </div>
+          <div className="topbar-right">
+            <Link className="ghost-button" href="/">
+              ＋ New task
+            </Link>
+          </div>
         </header>
         <div className="content">
-          <Suspense fallback={<div className="empty-state"><span className="spinner" /> LOADING TASK…</div>}>
+          <Suspense
+            fallback={
+              <div className="empty-state">
+                <span className="spinner" /> LOADING TASK…
+              </div>
+            }
+          >
             <TaskDetail params={params} />
           </Suspense>
         </div>
@@ -36,12 +50,19 @@ async function TaskDetail({ params }: { params: Promise<{ id: string }> }) {
     task = await getTask(id);
     activity = task ? await getTaskActivity(task.id) : null;
   } catch (error) {
-    return <div className="notice"><span>!</span>Couldn’t load this task: {error instanceof Error ? error.message : "database error"}</div>;
+    return (
+      <div className="notice">
+        <span>!</span>Couldn’t load this task:{" "}
+        {error instanceof Error ? error.message : "database error"}
+      </div>
+    );
   }
   if (!task || !activity) notFound();
   return (
     <>
-      <div className="task-detail-actions"><DeleteTaskButton taskId={task.id} redirectOnDelete /></div>
+      <div className="task-detail-actions">
+        <DeleteTaskButton taskId={task.id} redirectOnDelete />
+      </div>
       <AgentPanel taskId={task.id} initial={activity} />
       <SavedTaskView task={task} />
     </>

@@ -9,8 +9,11 @@ function isJunctionChallengesPage(url: string) {
   if (url === "pasted") return true;
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && /(^|\.)hackjunction\.app$/i.test(parsed.hostname)
-      && /^\/participate\/45\/challenges(?:\/|$)/.test(parsed.pathname);
+    return (
+      parsed.protocol === "https:" &&
+      /(^|\.)hackjunction\.app$/i.test(parsed.hostname) &&
+      /^\/participate\/45\/challenges(?:\/|$)/.test(parsed.pathname)
+    );
   } catch {
     return false;
   }
@@ -64,7 +67,13 @@ function bookmarkletSource(butlerOrigin: string) {
   return `javascript:${encodeURIComponent(code)}`;
 }
 
-export function ImportPanel({ onImport, disabled }: { onImport: (page: PageImport) => void; disabled: boolean }) {
+export function ImportPanel({
+  onImport,
+  disabled,
+}: {
+  onImport: (page: PageImport) => void;
+  disabled: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [pasted, setPasted] = useState("");
   const [error, setError] = useState("");
@@ -86,7 +95,8 @@ export function ImportPanel({ onImport, disabled }: { onImport: (page: PageImpor
     function handle(event: MessageEvent) {
       if (!openedRef.current || event.source !== openedRef.current) return;
       const parsed = pageImportSchema.safeParse(event.data);
-      if (parsed.success && isJunctionChallengesPage(parsed.data.url)) onImportRef.current(parsed.data);
+      if (parsed.success && isJunctionChallengesPage(parsed.data.url))
+        onImportRef.current(parsed.data);
     }
     window.addEventListener("message", handle);
     return () => window.removeEventListener("message", handle);
@@ -95,7 +105,8 @@ export function ImportPanel({ onImport, disabled }: { onImport: (page: PageImpor
   function openPage() {
     setError("");
     openedRef.current = window.open(JUNCTION_CHALLENGES_URL, "butler-import-target");
-    if (!openedRef.current) setError("Your browser blocked the new tab. Allow pop-ups for Chilly and try again.");
+    if (!openedRef.current)
+      setError("Your browser blocked the new tab. Allow pop-ups for Chilly and try again.");
   }
 
   function submitPaste() {
@@ -104,40 +115,81 @@ export function ImportPanel({ onImport, disabled }: { onImport: (page: PageImpor
     if (!text) return;
     try {
       const parsed = pageImportSchema.safeParse(JSON.parse(text));
-      if (parsed.success && isJunctionChallengesPage(parsed.data.url)) return onImport(parsed.data), setPasted("");
+      if (parsed.success && isJunctionChallengesPage(parsed.data.url))
+        return (onImport(parsed.data), setPasted(""));
     } catch {
       // Not JSON from the bookmarklet: treat as plain text lines.
     }
-    const items = text.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 80)
+    const items = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 80)
       .map((line) => ({ text: line.slice(0, 300), href: "" }));
     onImport({ type: "butler-import", url: "pasted", title: "Pasted by you", items });
     setPasted("");
   }
 
   if (!open) {
-    return <button className="link-button" onClick={() => setOpen(true)} disabled={disabled}>◈ Import Junction challenges</button>;
+    return (
+      <button className="link-button" onClick={() => setOpen(true)} disabled={disabled}>
+        ◈ Import Junction challenges
+      </button>
+    );
   }
 
   return (
     <div className="import-panel">
-      <p className="import-copy">Sign in to Junction in the opened tab if asked. Chilly reads only the challenge list you choose to send; your login session and token stay in your browser.</p>
+      <p className="import-copy">
+        Sign in to Junction in the opened tab if asked. Chilly reads only the challenge list you
+        choose to send; your login session and token stay in your browser.
+      </p>
       <ol className="import-steps">
         <li>
           <span>1</span>
-          <div>Drag this to your bookmarks bar (once):
-            <a ref={linkRef} className="bookmarklet" onClick={(e) => { e.preventDefault(); setError("Drag it to your bookmarks bar instead of clicking it here."); }}>⇪ Import challenges</a>
+          <div>
+            Drag this to your bookmarks bar (once):
+            <a
+              ref={linkRef}
+              className="bookmarklet"
+              onClick={(e) => {
+                e.preventDefault();
+                setError("Drag it to your bookmarks bar instead of clicking it here.");
+              }}
+            >
+              ⇪ Import challenges
+            </a>
           </div>
         </li>
         <li>
           <span>2</span>
-          <button className="ghost-button" onClick={openPage} disabled={disabled}>Open Junction challenges ↗</button>
+          <button className="ghost-button" onClick={openPage} disabled={disabled}>
+            Open Junction challenges ↗
+          </button>
         </li>
-        <li><span>3</span><div>On the challenges page, click <b>Import challenges</b>. Chilly collects visible challenge cards and shows them here.</div></li>
+        <li>
+          <span>3</span>
+          <div>
+            On the challenges page, click <b>Import challenges</b>. Chilly collects visible
+            challenge cards and shows them here.
+          </div>
+        </li>
       </ol>
       <details className="paste-fallback">
         <summary>Or paste it instead</summary>
-        <textarea value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Paste the challenge list JSON copied by the bookmarklet" maxLength={20000} />
-        <button className="ghost-button" onClick={submitPaste} disabled={disabled || !pasted.trim()}>Use this</button>
+        <textarea
+          value={pasted}
+          onChange={(e) => setPasted(e.target.value)}
+          placeholder="Paste the challenge list JSON copied by the bookmarklet"
+          maxLength={20000}
+        />
+        <button
+          className="ghost-button"
+          onClick={submitPaste}
+          disabled={disabled || !pasted.trim()}
+        >
+          Use this
+        </button>
       </details>
       {error && <p className="import-error">{error}</p>}
     </div>

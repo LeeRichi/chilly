@@ -1,43 +1,128 @@
 # Chilly
 
-A research-backed strategy desk for Junction 2026. The app searches with Exa, creates a validated blueprint with Gemini, and stores it in PostgreSQL only after a person approves it.
+Chilly is a research-backed personal assistant for live tasks. It searches the web with Exa, uses
+Gemini to turn current evidence into an actionable plan, and shows the sources behind its
+recommendations.
 
-## Getting started
+## What Chilly does
 
-1. Copy `.env.example` to `.env.local` and add your Gemini, Exa, and Aiven PostgreSQL credentials.
-2. Install packages with `npm install`.
+- Runs an Exa-researched task and a direct Gemini answer side by side from the same prompt. The
+  Gemini baseline does not search the web; Chilly uses Exa evidence before drafting its plan.
+- Shows sources, findings, options, recommendations, and next steps in a reviewable result.
+- Lets the user approve a plan before saving it to PostgreSQL or carrying out selected actions.
+- Tracks task progress, watches for relevant changes, and can send approved reminders through
+  Telegram.
+- Creates calendar files for dated plan steps. Prepared email messages open in the user's mail app
+  for review; Chilly does not send email automatically.
+
+## Quick start
+
+1. Copy `.env.example` to `.env.local` and add the required credentials.
+2. Install dependencies with `npm install`.
 3. Start the app with `npm run dev` and open [http://localhost:3000](http://localhost:3000).
 
-Draft generation needs `GEMINI_API_KEY` and `EXA_API_KEY`. Saving needs `DATABASE_URL`. The `blueprints` table is created on the first approved save; merely generating a draft does not write to the database.
+### Required configuration
 
-## Try these prompts
+| Variable         | Used for                                           |
+| ---------------- | -------------------------------------------------- |
+| `GEMINI_API_KEY` | Direct baseline answers and Chilly plan generation |
+| `EXA_API_KEY`    | Web research and background watches                |
+| `DATABASE_URL`   | Saving approved tasks and tracking their progress  |
 
-These examples cover a range of everyday tasks from the Junction challenge:
+Database tables are created when first needed. Generating a plan does not save it; the user must
+approve it first.
 
-1. **Rent and rights:** “My rent in Helsinki is going up by 15%. Is that allowed, and what should I check before replying to my landlord?”
-2. **Potentially missed benefits:** “I’m an international student in Finland and I’m struggling with monthly expenses. What benefits or support might I qualify for, and how do I apply?”
-3. **Travel disruption:** “My flight from Helsinki was cancelled and I need to get to Stockholm tomorrow. Find my options and help me figure out what to do next.”
-4. **Special occasion:** “Plan a birthday dinner in Helsinki for six people next Saturday, under €40 per person. One guest is vegetarian.”
-5. **Daily errand:** “I need to renew my passport while living in Helsinki. Find the steps, documents, costs, and earliest practical time to get it done.”
+Telegram is optional. Add a bot token, send the bot `/start`, then use **Connect** in the sidebar.
+The app fills in the chat ID during connection.
 
-To see how Chilly handles a vague request, try: “Help me plan a special occasion next month.” It should ask for details that affect the plan before researching options.
+## Demo flow
 
-Prepared messages open in your email app for you to review and send. Chilly does not send email automatically.
+1. Enter a task or choose a starter prompt. The direct Gemini answer and Chilly's research begin in
+   parallel.
+2. Review the research timeline and the side-by-side answers. Chilly's column includes its Exa
+   sources; Gemini's column is labeled as a direct answer without web search.
+3. Review Chilly's plan and approve it. Choose any calendar, reminder, or watch actions offered for
+   the task.
+4. Follow progress from the saved task. Real watches use Exa; demo watches are labeled and use
+   simulated updates.
 
-## Search depth selection
+Try a live query such as:
 
-Chilly selects Exa search depth with a shared, deterministic rule in `src/lib/research-mode.ts`; it does not make an extra model call just to classify a prompt.
+> My rent in Helsinki is going up by 15%. Is that allowed, and what should I check before replying
+> to my landlord?
 
-- **Deep** is selected whenever a research request contains more than one query. This covers follow-up searches that split a task into multiple questions.
-- **Deep** is also selected when a query includes legal, rights, regulation, eligibility, benefit, allowance, subsidy, grant, visa, residence permit, tenant, landlord, rent, tax, insurance, comparison, versus, best, cheapest, or options terms. The matcher includes English and common Chinese terms such as `福利`, `資格`, `租屋`, `法律`, and `比較`.
-- **Deep** is selected for multi-stop plans mentioning a plan/schedule/itinerary and a day, trip, flight, or similar travel term; for a fixed time or deadline combined with at least one condition; or when at least two condition markers appear (for example `and`, `before`, `under`, `then`, or a comma).
-- A prompt longer than 180 characters with at least one condition marker also uses **Deep**.
+Other useful prompts:
+
+- “I’m an international student in Finland and I’m struggling with monthly expenses. What support
+  might I qualify for, and how do I apply?”
+- “My flight from Helsinki was cancelled and I need to get to Stockholm tomorrow. Find my options
+  and help me decide what to do next.”
+- “Plan a birthday dinner in Helsinki for six people next Saturday, under €40 per person. One guest
+  is vegetarian.”
+- “Help me plan a special occasion next month.” Chilly should ask for details that affect the plan
+  before researching options.
+
+## How search depth is chosen
+
+Chilly uses the deterministic rule in [`src/lib/research-mode.ts`](src/lib/research-mode.ts); it does
+not make a model call just to classify the prompt.
+
+- **Deep** is selected whenever a research request contains more than one query, including follow-up
+  searches that split a task into multiple questions.
+- **Deep** is selected for legal, rights, regulation, eligibility, benefit, allowance, subsidy, grant,
+  visa, residence permit, tenant, landlord, rent, tax, insurance, comparison, versus, best, cheapest,
+  or options terms. The matcher includes common Chinese terms such as `福利`, `資格`, `租屋`, `法律`,
+  and `比較`.
+- **Deep** is selected for multi-stop plans that mention a plan, schedule, or itinerary together
+  with a day, trip, flight, or similar travel term; for a fixed time or deadline with at least one
+  condition; or when at least two condition markers appear, such as `and`, `before`, `under`, `then`,
+  or a comma.
+- Prompts longer than 180 characters with at least one condition marker also use **Deep**.
 - All other requests use **Auto**.
 
-Deep searches request structured findings and caveats from Exa. Chilly attaches Exa's field-level citations to the corresponding source evidence before Gemini drafts the final plan. Search depth is visible in the research timeline. Deep requests reserve `$0.02` against the Exa budget before the call; the ledger is adjusted to Exa's reported cost after it returns.
+Deep searches request structured findings and caveats from Exa. Chilly attaches Exa's field-level
+citations to the corresponding evidence before Gemini drafts the plan. The selected depth appears in
+the research timeline. Normal searches may reuse identical results for up to six hours and request
+page content no older than `BUTLER_EXA_MAX_AGE_HOURS` (24 hours by default).
 
-## Safety flow
+## Approval and data flow
 
-`DRAFTING` → `PENDING_APPROVAL` → `SAVED`
+`Research → Draft → Review → Approve → Save / Act`
 
-Search and generation are read-only. The browser holds the pending blueprint. The save server action validates it again before inserting it into PostgreSQL.
+Search and drafting are read-only. Chilly validates the plan again on the server when it is approved.
+Only then can it save the task and carry out the actions selected by the user. Calendar steps are
+downloaded as an `.ics` file; Telegram reminders and watches require an active connection and the
+user's approval.
+
+## Limits and optional settings
+
+Defaults are listed in `.env.example`. They can be overridden in the server environment.
+
+| Variable                       |                                       Default | Purpose                                           |
+| ------------------------------ | --------------------------------------------: | ------------------------------------------------- |
+| `GEMINI_MODELS`                | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Gemini model fallback order                       |
+| `BUTLER_GEMINI_DAILY_CALLS`    |                                         `120` | Daily Gemini request limit, including comparisons |
+| `BUTLER_EXA_DAILY_USD`         |                                           `1` | Daily Exa spend limit                             |
+| `BUTLER_EXA_DAILY_SEARCHES`    |                                          `60` | Daily Exa search limit                            |
+| `BUTLER_TASK_MAX_SEARCHES`     |                                           `5` | Search limit per task                             |
+| `BUTLER_TASK_MAX_DRAFTS`       |                                           `4` | Structured draft limit per task                   |
+| `BUTLER_EXA_ESTIMATE_USD`      |                                        `0.01` | Reserved cost per standard search                 |
+| `BUTLER_EXA_DEEP_ESTIMATE_USD` |                                        `0.02` | Reserved cost per Deep search                     |
+| `BUTLER_EXA_MAX_AGE_HOURS`     |                                          `24` | Maximum page age requested for normal searches    |
+| `BUTLER_MAX_WATCHES`           |                                           `3` | Maximum active watches                            |
+| `BUTLER_WATCH_EVERY_HOURS`     |                                          `24` | Default watch interval                            |
+| `BUTLER_REMINDER_LEAD_MIN`     |                                          `10` | Default reminder lead time                        |
+
+The direct Gemini comparison uses the configured Gemini model fallback list and counts against the
+daily Gemini request limit. Exa cost estimates reserve budget before a search; the ledger is updated
+to the reported cost when Exa returns it.
+
+## Development
+
+```bash
+npm run dev          # Start the local app
+npm run lint         # Run ESLint
+npm run format       # Format app source and README
+npm run format:check # Check formatting without changing files
+npm run build        # Build for deployment
+```
