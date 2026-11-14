@@ -6,8 +6,9 @@ recommendations.
 
 ## What Chilly does
 
-- Runs an Exa-researched task and a direct Gemini answer side by side from the same prompt. The
-  Gemini baseline does not search the web; Chilly uses Exa evidence before drafting its plan.
+- Checks whether the task has enough user-specific context, then runs an Exa-researched task and a
+  direct Gemini answer side by side. The Gemini baseline does not search the web; Chilly uses Exa
+  evidence before drafting its plan.
 - Shows sources, findings, options, recommendations, and next steps in a reviewable result.
 - Lets the user approve a plan before saving it to PostgreSQL or carrying out selected actions.
 - Tracks task progress, watches for relevant changes, and can send approved reminders through
@@ -23,11 +24,11 @@ recommendations.
 
 ### Required configuration
 
-| Variable         | Used for                                           |
-| ---------------- | -------------------------------------------------- |
-| `GEMINI_API_KEY` | Direct baseline answers and Chilly plan generation |
-| `EXA_API_KEY`    | Web research and background watches                |
-| `DATABASE_URL`   | Saving approved tasks and tracking their progress  |
+| Variable         | Used for                                                           |
+| ---------------- | ------------------------------------------------------------------ |
+| `GEMINI_API_KEY` | Intake checks, direct baseline answers, and Chilly plan generation |
+| `EXA_API_KEY`    | Web research and background watches                                |
+| `DATABASE_URL`   | Saving approved tasks and tracking their progress                  |
 
 Database tables are created when first needed. Generating a plan does not save it; the user must
 approve it first.
@@ -37,13 +38,15 @@ The app fills in the chat ID during connection.
 
 ## Demo flow
 
-1. Enter a task or choose a starter prompt. The direct Gemini answer and Chilly's research begin in
+1. Enter a task or choose a starter prompt. Chilly checks for missing details that could change the
+   result. If it needs user-specific context, it asks before searching.
+2. Once there is enough context, the direct Gemini answer and Chilly's Exa research begin in
    parallel.
-2. Review the research timeline and the side-by-side answers. Chilly's column includes its Exa
+3. Review the research timeline and the side-by-side answers. Chilly's column includes its Exa
    sources; Gemini's column is labeled as a direct answer without web search.
-3. Review Chilly's plan and approve it. Choose any calendar, reminder, or watch actions offered for
+4. Review Chilly's plan and approve it. Choose any calendar, reminder, or watch actions offered for
    the task.
-4. Follow progress from the saved task. Real watches use Exa; demo watches are labeled and use
+5. Follow progress from the saved task. Real watches use Exa; demo watches are labeled and use
    simulated updates.
 
 Try a live query such as:
@@ -61,6 +64,38 @@ Other useful prompts:
   is vegetarian.”
 - “Help me plan a special occasion next month.” Chilly should ask for details that affect the plan
   before researching options.
+
+## Context sufficiency and clarification
+
+Before the first Exa search, Gemini runs a structured intake assessment. It decides whether Chilly
+has enough context to make a useful first result, and returns one of three outcomes: proceed, ask
+focused questions, or proceed with explicit assumptions. The same policy applies across task types;
+it is not a fixed list of prompts or required fields.
+
+1. **Ask the user** when missing, user-specific information could materially change the result.
+2. **Research with Exa** when the missing information is public and can be found online.
+3. **State an assumption** when the missing detail has low impact and a useful result is still
+   possible.
+
+Chilly asks up to three focused questions per turn and allows at most two clarification rounds. At
+the limit, it proceeds and asks Gemini to disclose remaining assumptions in the plan. User answers
+are included in subsequent Exa queries. Imported content is available to the intake and plan stages
+as reference data. Intake assumptions are also passed to the plan so they can be identified rather
+than stated as confirmed facts.
+
+For example, a local weather task needs a location before Chilly searches or sets up a watch. For a
+benefits task, Chilly can ask for personal eligibility context while using Exa to research current
+rules and application steps.
+
+### One product differentiator
+
+Clarifying questions alone are common. One of Chilly's differentiators is deciding what to ask the
+user, what to find with Exa, and what can safely be assumed before research starts. Once the task is
+ready, both answers use the clarified task. The direct Gemini baseline answers without web search;
+Chilly adds Exa research and visible citations. This makes the effect of current evidence easy to
+compare. The demo should show the full loop: clarify a decision-critical detail, research current
+sources, present a plan, and let the user approve actions. This is one part of Chilly's product
+design, not a claim that intake alone guarantees a better answer.
 
 ## How search depth is chosen
 
@@ -98,24 +133,24 @@ user's approval.
 
 Defaults are listed in `.env.example`. They can be overridden in the server environment.
 
-| Variable                       |                                       Default | Purpose                                           |
-| ------------------------------ | --------------------------------------------: | ------------------------------------------------- |
-| `GEMINI_MODELS`                | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Gemini model fallback order                       |
-| `BUTLER_GEMINI_DAILY_CALLS`    |                                         `120` | Daily Gemini request limit, including comparisons |
-| `BUTLER_EXA_DAILY_USD`         |                                           `1` | Daily Exa spend limit                             |
-| `BUTLER_EXA_DAILY_SEARCHES`    |                                          `60` | Daily Exa search limit                            |
-| `BUTLER_TASK_MAX_SEARCHES`     |                                           `5` | Search limit per task                             |
-| `BUTLER_TASK_MAX_DRAFTS`       |                                           `4` | Structured draft limit per task                   |
-| `BUTLER_EXA_ESTIMATE_USD`      |                                        `0.01` | Reserved cost per standard search                 |
-| `BUTLER_EXA_DEEP_ESTIMATE_USD` |                                        `0.02` | Reserved cost per Deep search                     |
-| `BUTLER_EXA_MAX_AGE_HOURS`     |                                          `24` | Maximum page age requested for normal searches    |
-| `BUTLER_MAX_WATCHES`           |                                           `3` | Maximum active watches                            |
-| `BUTLER_WATCH_EVERY_HOURS`     |                                          `24` | Default watch interval                            |
-| `BUTLER_REMINDER_LEAD_MIN`     |                                          `10` | Default reminder lead time                        |
+| Variable                       |                                       Default | Purpose                                            |
+| ------------------------------ | --------------------------------------------: | -------------------------------------------------- |
+| `GEMINI_MODELS`                | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Gemini model fallback order                        |
+| `BUTLER_GEMINI_DAILY_CALLS`    |                                         `120` | Daily limit for intake, comparison, and plan calls |
+| `BUTLER_EXA_DAILY_USD`         |                                           `1` | Daily Exa spend limit                              |
+| `BUTLER_EXA_DAILY_SEARCHES`    |                                          `60` | Daily Exa search limit                             |
+| `BUTLER_TASK_MAX_SEARCHES`     |                                           `5` | Search limit per task                              |
+| `BUTLER_TASK_MAX_DRAFTS`       |                                           `4` | Structured draft limit per task                    |
+| `BUTLER_EXA_ESTIMATE_USD`      |                                        `0.01` | Reserved cost per standard search                  |
+| `BUTLER_EXA_DEEP_ESTIMATE_USD` |                                        `0.02` | Reserved cost per Deep search                      |
+| `BUTLER_EXA_MAX_AGE_HOURS`     |                                          `24` | Maximum page age requested for normal searches     |
+| `BUTLER_MAX_WATCHES`           |                                           `3` | Maximum active watches                             |
+| `BUTLER_WATCH_EVERY_HOURS`     |                                          `24` | Default watch interval                             |
+| `BUTLER_REMINDER_LEAD_MIN`     |                                          `10` | Default reminder lead time                         |
 
-The direct Gemini comparison uses the configured Gemini model fallback list and counts against the
-daily Gemini request limit. Exa cost estimates reserve budget before a search; the ledger is updated
-to the reported cost when Exa returns it.
+Intake checks, direct Gemini comparisons, and plan drafting use the configured Gemini model fallback
+list and count against the daily Gemini request limit. Exa cost estimates reserve budget before a
+search; the ledger is updated to the reported cost when Exa returns it.
 
 ## Development
 

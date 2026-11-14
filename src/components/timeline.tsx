@@ -480,7 +480,7 @@ function ActionRow({
   checked: boolean;
   onChange?: (v: boolean) => void;
   disabled?: boolean;
-  icon: string;
+  icon: ReactNode;
   label: ReactNode;
   detail?: ReactNode;
   cost?: string;
@@ -501,6 +501,18 @@ function ActionRow({
       </span>
       {cost && <span className={`will-cost ${cost === "free" ? "is-free" : ""}`}>{cost}</span>}
     </label>
+  );
+}
+
+function TelegramIcon() {
+  return (
+    <svg className="telegram-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#26a5e4" />
+      <path
+        d="m18.9 6.2-2.1 10.2c-.2.8-.8 1-1.5.6l-4.1-3-2 1.9c-.2.2-.4.4-.8.4l.3-4.2 7.6-6.9c.3-.3-.1-.4-.5-.1l-9.4 5.9-4-1.2c-.9-.3-.9-.9.2-1.3l15.6-6c.7-.3 1.3.2 1.1 1.1Z"
+        fill="white"
+      />
+    </svg>
   );
 }
 
@@ -613,11 +625,11 @@ function ResultCard({
               )}
               {reminderCount > 0 && (
                 <ActionRow
-                  icon="⏰"
+                  icon={<TelegramIcon />}
                   checked={sel.reminders}
                   disabled={!tgOk || saved}
                   onChange={(v) => setSel((s) => ({ ...s, reminders: v }))}
-                  label={`Remind me on Telegram before each step (${reminderCount})`}
+                  label="Remind me on Telegram before each step"
                   detail={
                     tgOk
                       ? `${reminderLeadMinutes} min before each step · Chilly sends them, you don’t have to do anything`
@@ -646,13 +658,6 @@ function ResultCard({
                         {sel.watchModes[i] === "demo" ? "DEMO SIMULATION" : "LIVE UPDATES · EXA"}
                       </span>
                       <strong>{w.reason}</strong>
-                    </span>
-                    <span className="watch-frequency">
-                      {sel.watchModes[i] === "demo"
-                        ? "DEMO · 30 SEC"
-                        : (sel.watchIntervals[i] ?? 1440) < 60
-                          ? `EVERY ${sel.watchIntervals[i] ?? 2} MIN`
-                          : `EVERY ${(sel.watchIntervals[i] ?? 1440) / 60}H`}
                     </span>
                   </label>
                   <div className="watch-query">{w.query}</div>
@@ -723,7 +728,7 @@ function ResultCard({
                 </div>
               ))}
               <ActionRow
-                icon="📱"
+                icon={<TelegramIcon />}
                 checked={sel.telegram}
                 disabled={!tgOk || saved}
                 onChange={(v) => setSel((s) => ({ ...s, telegram: v }))}
@@ -820,19 +825,107 @@ function AgentConversationStep({ step }: { step: Extract<Step, { kind: "agents" 
     <StepShell step={step}>
       <section className="agent-conversation" aria-label="Multi-agent conversation">
         <div className="agent-conversation-heading">
-          <span className="block-label">AGENT CONVERSATION</span>
-          <span>STRATEGIST → CHALLENGER</span>
+          <span className="block-label">MULTI-AGENT REVIEW</span>
+          <span>STRATEGIST ↔ CHALLENGER</span>
         </div>
-        {step.turns.map((turn) => (
-          <div className={`agent-turn is-${turn.role}`} key={turn.role}>
-            <span className="agent-turn-role">
-              {turn.role === "strategist" ? "STRATEGIST · PROPOSAL" : "CHALLENGER · REVIEW"}
-            </span>
-            <p>{turn.message}</p>
-          </div>
-        ))}
+        <div className="agent-chat-thread">
+          {step.turns.map((turn) => (
+            <div className={`agent-message-row is-${turn.role}`} key={turn.role}>
+              <AgentAvatar role={turn.role} />
+              <div className="agent-message-bubble">
+                <span className="agent-turn-role">
+                  {turn.role === "strategist" ? "STRATEGIST · PROPOSAL" : "CHALLENGER · REVIEW"}
+                </span>
+                <p>{turn.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
     </StepShell>
+  );
+}
+
+function AgentAvatar({ role }: { role: "strategist" | "challenger" }) {
+  const challenger = role === "challenger";
+  const prefix = challenger ? "challenger" : "strategist";
+
+  return (
+    <span
+      className={`agent-avatar is-${role}`}
+      role="img"
+      aria-label={challenger ? "Challenger bot" : "Strategist bot"}
+    >
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id={`${prefix}-shell`} x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0" stopColor={challenger ? "#ffc27e" : "#efff9b"} />
+            <stop offset="0.48" stopColor={challenger ? "#b9713f" : "#8fa63b"} />
+            <stop offset="1" stopColor={challenger ? "#603c2c" : "#465625"} />
+          </linearGradient>
+          <linearGradient id={`${prefix}-visor`} x1="0" x2="0.9" y1="0" y2="1">
+            <stop offset="0" stopColor="#303c36" />
+            <stop offset="1" stopColor="#111813" />
+          </linearGradient>
+          <filter id={`${prefix}-shadow`} x="-30%" y="-30%" width="160%" height="170%">
+            <feDropShadow dx="0" dy="3" stdDeviation="2.5" floodColor="#000" floodOpacity="0.48" />
+          </filter>
+        </defs>
+        <ellipse cx="32" cy="56" rx="18" ry="4" fill="#000" opacity="0.28" />
+        <g filter={`url(#${prefix}-shadow)`}>
+          <path
+            d="M32 14V9"
+            fill="none"
+            stroke={challenger ? "#ed9a5c" : "#d9f578"}
+            strokeLinecap="round"
+            strokeWidth="3"
+          />
+          <circle cx="32" cy="7" r="3.5" fill={challenger ? "#ffb174" : "#e5ff87"} />
+          <rect
+            x="7"
+            y="27"
+            width="8"
+            height="17"
+            rx="4"
+            fill={challenger ? "#8e5238" : "#687b31"}
+          />
+          <rect
+            x="49"
+            y="27"
+            width="8"
+            height="17"
+            rx="4"
+            fill={challenger ? "#8e5238" : "#687b31"}
+          />
+          <rect
+            x="12"
+            y="14"
+            width="40"
+            height="39"
+            rx="14"
+            fill={`url(#${prefix}-shell)`}
+            stroke={challenger ? "#d58b5c" : "#d9ef8b"}
+            strokeOpacity="0.75"
+          />
+          <path
+            d="M19 19c3-3 8-4 13-4h5c-10 2-15 8-15 18v7c-4-4-6-9-6-14 0-3 1-5 3-7Z"
+            fill="#fff"
+            opacity="0.15"
+          />
+          <rect x="17" y="25" width="30" height="19" rx="8" fill={`url(#${prefix}-visor)`} />
+          <circle cx="25" cy="34" r="2.7" fill={challenger ? "#ffbd83" : "#e2ff79"} />
+          <circle cx="39" cy="34" r="2.7" fill={challenger ? "#ffbd83" : "#e2ff79"} />
+          <path
+            d={challenger ? "M27 40h10" : "M28 40h8"}
+            stroke={challenger ? "#f29a66" : "#b7d95b"}
+            strokeLinecap="round"
+            strokeWidth="1.8"
+          />
+          <circle cx="20" cy="47" r="1.5" fill="#fff" opacity="0.55" />
+          <circle cx="44" cy="47" r="1.5" fill="#fff" opacity="0.55" />
+        </g>
+      </svg>
+    </span>
   );
 }
 
