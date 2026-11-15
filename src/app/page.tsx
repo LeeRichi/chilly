@@ -24,6 +24,8 @@ import type { UsageSnapshot } from "@/lib/usage";
 import { MAX_CLARIFY_ROUNDS } from "@/lib/intake";
 import { getDeviceId, saveLocalTask, updateLocalProgress } from "@/lib/local-tasks";
 
+export const maxDuration = 60;
+
 const starters = [
   { prompt: "I'm an international student in Finland. Which benefits can I apply for?" },
   {
@@ -301,13 +303,27 @@ export default function Home() {
       startedAt,
       label: "Checking what I need to know",
     });
-    const res = await assessTaskReadiness({
-      taskId: c.taskId,
-      prompt: c.prompt,
-      clarifications: c.clarifications,
-      imports: c.imports.slice(-3),
-      round: c.round,
-    });
+    let res: Awaited<ReturnType<typeof assessTaskReadiness>>;
+    try {
+      res = await assessTaskReadiness({
+        taskId: c.taskId,
+        prompt: c.prompt,
+        clarifications: c.clarifications,
+        imports: c.imports.slice(-3),
+        round: c.round,
+      });
+    } catch (error) {
+      if (token !== run.current) return;
+      const reason = error instanceof Error ? error.name : "RequestError";
+      console.error("[chilly] readiness action rejected", reason);
+      patch(id, {
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        error: `The context check was interrupted (${reason}). Check the connection and retry.`,
+        retry: () => void checkReadinessAndStart(token),
+      });
+      return;
+    }
     if (token !== run.current) return;
     if (res.usage) setUsage(res.usage);
     const durationMs = Date.now() - startedAt;
