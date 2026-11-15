@@ -147,10 +147,10 @@ function toWatch(r: Record<string, unknown>): Watch {
   };
 }
 
-export async function countActiveWatches() {
+export async function countActiveWatches(ownerId: string) {
   await ensureTables();
   const [row] =
-    await getDb()`SELECT count(*)::int AS n FROM watches WHERE active AND until > now()`;
+    await getDb()`SELECT count(*)::int AS n FROM watches w JOIN tasks t ON t.id = w.task_id WHERE w.active AND w.until > now() AND t.owner_id = ${ownerId}`;
   return row.n as number;
 }
 
@@ -236,15 +236,16 @@ export async function setWatchActive(id: string, active: boolean) {
 }
 
 /** Deletes a saved task and all of its background activity in one transaction. */
-export async function deleteTaskAndActivity(taskId: string) {
+export async function deleteTaskAndActivity(taskId: string, ownerId: string) {
   await ensureTables();
   const sql = getDb();
   return sql.begin(async (tx) => {
-    await tx`DELETE FROM watch_runs WHERE watch_id IN (SELECT id FROM watches WHERE task_id = ${taskId})`;
-    await tx`DELETE FROM watches WHERE task_id = ${taskId}`;
-    await tx`DELETE FROM reminders WHERE task_id = ${taskId}`;
-    await tx`DELETE FROM task_actions WHERE task_id = ${taskId}`;
-    const rows = await tx`DELETE FROM tasks WHERE id = ${taskId} RETURNING id`;
+    await tx`DELETE FROM watch_runs WHERE watch_id IN (SELECT id FROM watches WHERE task_id = ${taskId} AND task_id IN (SELECT id FROM tasks WHERE owner_id = ${ownerId}))`;
+    await tx`DELETE FROM watches WHERE task_id = ${taskId} AND task_id IN (SELECT id FROM tasks WHERE owner_id = ${ownerId})`;
+    await tx`DELETE FROM reminders WHERE task_id = ${taskId} AND task_id IN (SELECT id FROM tasks WHERE owner_id = ${ownerId})`;
+    await tx`DELETE FROM task_actions WHERE task_id = ${taskId} AND task_id IN (SELECT id FROM tasks WHERE owner_id = ${ownerId})`;
+    const rows =
+      await tx`DELETE FROM tasks WHERE id = ${taskId} AND owner_id = ${ownerId} RETURNING id`;
     return rows.length > 0;
   });
 }
@@ -328,9 +329,9 @@ export async function finishReminder(id: string, ok: boolean, error?: string) {
   await getDb()`UPDATE reminders SET status = ${ok ? "sent" : "failed"}, error = ${error ?? null}, sent_at = ${ok ? new Date() : null} WHERE id = ${id}`;
 }
 
-export async function cancelReminder(id: string) {
+export async function cancelReminder(id: string, ownerId: string) {
   await ensureTables();
   const rows =
-    await getDb()`UPDATE reminders SET status = 'cancelled' WHERE id = ${id} AND status = 'pending' RETURNING task_id`;
+    await getDb()`UPDATE reminders SET status = 'cancelled' WHERE id = ${id} AND status = 'pending' AND task_id IN (SELECT id FROM tasks WHERE owner_id = ${ownerId}) RETURNING task_id`;
   return rows[0]?.task_id as string | undefined;
 }

@@ -32,7 +32,15 @@ function relative(iso: string, now: number) {
   return diff >= 0 ? `in ${label}` : `${label} ago`;
 }
 
-export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskActivity }) {
+export function AgentPanel({
+  taskId,
+  deviceId,
+  initial,
+}: {
+  taskId: string;
+  deviceId: string;
+  initial: TaskActivity;
+}) {
   const [data, setData] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<Record<string, string>>({});
@@ -42,13 +50,24 @@ export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskA
     return () => clearInterval(t);
   }, []);
 
-  const refresh = async () => setData(await getTaskActivity(taskId));
+  const refresh = async () => setData(await getTaskActivity(taskId, deviceId));
+  useEffect(() => {
+    let mounted = true;
+    void getTaskActivity(taskId, deviceId)
+      .then((next) => {
+        if (mounted) setData(next);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [taskId, deviceId]);
   const hasPendingDemo = data.watches.some((w) => w.demoMode && w.active);
   useEffect(() => {
     if (!hasPendingDemo) return;
     let mounted = true;
     const timer = setInterval(() => {
-      void getTaskActivity(taskId).then((next) => {
+      void getTaskActivity(taskId, deviceId).then((next) => {
         if (mounted) setData(next);
       });
     }, 5_000);
@@ -56,11 +75,11 @@ export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskA
       mounted = false;
       clearInterval(timer);
     };
-  }, [taskId, hasPendingDemo]);
+  }, [taskId, deviceId, hasPendingDemo]);
 
   async function check(id: string) {
     setBusy(id);
-    const res = await checkWatchNow(id);
+    const res = await checkWatchNow(id, deviceId);
     setNote((n) => ({
       ...n,
       [id]: res.ok
@@ -74,7 +93,7 @@ export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskA
 
   async function testReminder() {
     setBusy("test");
-    const res = await testReminderAction(taskId);
+    const res = await testReminderAction(taskId, deviceId);
     setNote((n) => ({
       ...n,
       test: res.ok ? "Scheduled — your phone should buzz in about a minute." : res.error,
@@ -85,14 +104,14 @@ export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskA
 
   async function cancel(id: string) {
     setBusy(id);
-    await cancelReminderAction(id);
+    await cancelReminderAction(id, deviceId);
     await refresh();
     setBusy(null);
   }
 
   async function stop(id: string) {
     setBusy(id);
-    await stopWatch(id);
+    await stopWatch(id, deviceId);
     await refresh();
     setBusy(null);
   }
@@ -123,7 +142,14 @@ export function AgentPanel({ taskId, initial }: { taskId: string; initial: TaskA
                   <span className={`live-dot ${live ? "" : "is-off"}`} />
                   <div className="watch-main">
                     <b>
-                      {w.reason} {w.demoMode ? <span className="demo-watch-badge">DEMO</span> : w.everyMinutes >= 60 && <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>}
+                      {w.reason}{" "}
+                      {w.demoMode ? (
+                        <span className="demo-watch-badge">DEMO</span>
+                      ) : (
+                        w.everyMinutes >= 60 && (
+                          <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>
+                        )
+                      )}
                     </b>
                     <small>
                       <code>{w.query}</code>

@@ -1,27 +1,21 @@
 import Link from "next/link";
-import { connection } from "next/server";
-import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getTaskActivity } from "@/app/agent-actions";
-import { AgentPanel } from "@/components/agent-panel";
-import { SavedTaskView } from "@/components/saved-task-view";
 import { Sidebar } from "@/components/sidebar";
 import { WorkspaceNav } from "@/components/workspace-nav";
-import { DeleteTaskButton } from "@/components/delete-task-button";
-import { getTask } from "@/lib/tasks";
+import { LocalTaskDetail } from "@/components/local-task-detail";
 
 export default function TaskPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <main className="app-shell">
-      <Suspense fallback={<aside className="sidebar" aria-hidden="true" />}>
-        <Sidebar />
-      </Suspense>
+      <Sidebar />
       <section className="main-column">
         <header className="topbar">
           <div className="breadcrumb">
             <Link href="/tasks">SAVED TASKS</Link> <span>/</span> TASK
           </div>
-          <div className="topbar-right"><WorkspaceNav current="tasks" /></div>
+          <div className="topbar-right">
+            <WorkspaceNav current="tasks" />
+          </div>
         </header>
         <div className="content">
           <Suspense
@@ -40,28 +34,6 @@ export default function TaskPage({ params }: { params: Promise<{ id: string }> }
 }
 
 async function TaskDetail({ params }: { params: Promise<{ id: string }> }) {
-  await connection();
   const { id } = await params;
-  let task, activity;
-  try {
-    task = await getTask(id);
-    activity = task ? await getTaskActivity(task.id) : null;
-  } catch (error) {
-    return (
-      <div className="notice">
-        <span>!</span>Couldn’t load this task:{" "}
-        {error instanceof Error ? error.message : "database error"}
-      </div>
-    );
-  }
-  if (!task || !activity) notFound();
-  return (
-    <>
-      <div className="task-detail-actions">
-        <DeleteTaskButton taskId={task.id} redirectOnDelete />
-      </div>
-      <AgentPanel taskId={task.id} initial={activity} />
-      <SavedTaskView task={task} />
-    </>
-  );
+  return <LocalTaskDetail taskId={id} />;
 }

@@ -6,9 +6,8 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (!process.env.DATABASE_URL) return;
 
-  const { randomUUID } = await import("node:crypto");
   // Shared secret so only this process (or a cron you configure with the same value) can trigger runs.
-  process.env.BUTLER_TICK_TOKEN ||= randomUUID();
+  process.env.BUTLER_TICK_TOKEN ||= globalThis.crypto.randomUUID();
 
   const g = globalThis as unknown as { __butlerTicker?: ReturnType<typeof setInterval> };
   if (g.__butlerTicker) return;

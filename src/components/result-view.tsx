@@ -159,20 +159,26 @@ export function ResultView(props: {
         <section className="agent-conversation" aria-label="Agent conversation">
           <div className="agent-conversation-heading">
             <span className="block-label">MULTI-AGENT REVIEW</span>
-            <span>{r.agentConversation.some((turn) => turn.role === "judge") ? "STRATEGIST ∥ CHALLENGER → JUDGE" : "STRATEGIST ↔ CHALLENGER"}</span>
+            <span>
+              {r.agentConversation.some((turn) => turn.role === "judge")
+                ? "STRATEGIST ∥ CHALLENGER → JUDGE"
+                : "STRATEGIST ↔ CHALLENGER"}
+            </span>
           </div>
           {r.agentConversation.map((turn) => (
             <div className={`agent-turn is-${turn.role}`} key={turn.role}>
               <span className="agent-turn-role">
-                {{
-                  strategist: "STRATEGIST · PROPOSAL",
-                  challenger: "CHALLENGER · REVIEW",
-                  judge: "JUDGE · FINAL DECISION",
-                  challenge_fit: "CHALLENGE FIT ANALYST",
-                  builder: "MVP BUILDER",
-                  demo_judge: "DEMO JUDGE",
-                  orchestrator: "ORCHESTRATOR · DECISION",
-                }[turn.role]}
+                {
+                  {
+                    strategist: "STRATEGIST · PROPOSAL",
+                    challenger: "CHALLENGER · REVIEW",
+                    judge: "JUDGE · FINAL DECISION",
+                    challenge_fit: "CHALLENGE FIT ANALYST",
+                    builder: "MVP BUILDER",
+                    demo_judge: "DEMO JUDGE",
+                    orchestrator: "ORCHESTRATOR · DECISION",
+                  }[turn.role]
+                }
               </span>
               <p>{turn.message}</p>
             </div>

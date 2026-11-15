@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
 import {
   clarificationSchema,
@@ -36,9 +35,12 @@ function ensureTable() {
       result jsonb NOT NULL,
       sources jsonb NOT NULL,
       status text NOT NULL CHECK (status = 'SAVED'),
+      owner_id uuid,
       created_at timestamptz NOT NULL DEFAULT now()
     )`;
     await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress jsonb NOT NULL DEFAULT '{}'::jsonb`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS owner_id uuid`;
+    await sql`CREATE INDEX IF NOT EXISTS tasks_owner_created_idx ON tasks (owner_id, created_at DESC)`;
   })().catch((error) => {
     ready = undefined; // allow a retry after e.g. a network blip
     throw error;
@@ -63,23 +65,26 @@ function toTask(row: unknown): StoredTask | null {
   return { ...rest, createdAt: created_at.toISOString() };
 }
 
-export async function insertTask(task: Omit<StoredTask, "id" | "createdAt">) {
+export async function insertTask(
+  task: Omit<StoredTask, "id" | "createdAt">,
+  ownerId: string,
+  id: string,
+) {
   await ensureTable();
   const sql = getDb();
-  const id = randomUUID();
   const [row] = await sql`
-    INSERT INTO tasks (id, prompt, clarifications, result, sources, progress, status)
-    VALUES (${id}, ${task.prompt}, ${sql.json(task.clarifications)}, ${sql.json(task.result)}, ${sql.json(task.sources)}, ${sql.json(task.progress)}, 'SAVED')
+    INSERT INTO tasks (id, prompt, clarifications, result, sources, progress, status, owner_id)
+    VALUES (${id}, ${task.prompt}, ${sql.json(task.clarifications)}, ${sql.json(task.result)}, ${sql.json(task.sources)}, ${sql.json(task.progress)}, 'SAVED', ${ownerId})
     RETURNING created_at
   `;
   return { id, savedAt: new Date(row.created_at).toISOString() };
 }
 
-export async function listTasks(limit = 50): Promise<StoredTask[]> {
+export async function listTasks(ownerId: string, limit = 50): Promise<StoredTask[]> {
   await ensureTable();
   const rows = await getDb()`
     SELECT id, prompt, clarifications, result, sources, progress, created_at
-    FROM tasks ORDER BY created_at DESC LIMIT ${limit}
+    FROM tasks WHERE owner_id = ${ownerId} ORDER BY created_at DESC LIMIT ${limit}
   `;
   return rows.map(toTask).filter((t): t is StoredTask => t !== null);
 }
@@ -94,9 +99,20 @@ export async function getTask(id: string): Promise<StoredTask | null> {
   return row ? toTask(row) : null;
 }
 
-export async function updateProgress(id: string, progress: Progress) {
+export async function getOwnedTask(id: string, ownerId: string): Promise<StoredTask | null> {
+  if (!z.string().uuid().safeParse(id).success || !z.string().uuid().safeParse(ownerId).success)
+    return null;
+  await ensureTable();
+  const [row] = await getDb()`
+    SELECT id, prompt, clarifications, result, sources, progress, created_at
+    FROM tasks WHERE id = ${id} AND owner_id = ${ownerId}
+  `;
+  return row ? toTask(row) : null;
+}
+
+export async function updateProgress(id: string, progress: Progress, ownerId: string) {
   await ensureTable();
   const rows =
-    await getDb()`UPDATE tasks SET progress = ${getDb().json(progress)} WHERE id = ${id} RETURNING id`;
+    await getDb()`UPDATE tasks SET progress = ${getDb().json(progress)} WHERE id = ${id} AND owner_id = ${ownerId} RETURNING id`;
   return rows.length > 0;
 }

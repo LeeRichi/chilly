@@ -1,34 +1,28 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { saveProgress } from "@/app/actions";
+import { useState } from "react";
 import type { Progress } from "@/lib/schemas";
-import type { StoredTask } from "@/lib/tasks";
+import type { LocalTask } from "@/lib/local-tasks";
+import { updateLocalProgress } from "@/lib/local-tasks";
 import { ResultView } from "./result-view";
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+type SaveState = "idle" | "saved";
 
-export function SavedTaskView({ task }: { task: StoredTask }) {
+export function SavedTaskView({ task }: { task: LocalTask }) {
   const [progress, setProgress] = useState<Progress>(task.progress);
   const [active, setActive] = useState<string | null>(null);
   const [state, setState] = useState<SaveState>("idle");
-  const latest = useRef(0);
 
   function toggle(key: string, checked: boolean) {
     const next = { ...progress, [key]: checked };
     setProgress(next);
-    setState("saving");
-    const request = ++latest.current;
-    void saveProgress(task.id, next).then((res) => {
-      if (request === latest.current) setState(res.ok ? "saved" : "error");
-    });
+    updateLocalProgress(task.id, next);
+    setState("saved");
   }
 
   const note = {
-    idle: "Ticks are saved to this task.",
-    saving: "Saving…",
-    saved: "✓ Saved to Aiven",
-    error: "Couldn’t save — try again.",
+    idle: "Ticks are saved in this browser.",
+    saved: "✓ Saved locally",
   }[state];
 
   return (

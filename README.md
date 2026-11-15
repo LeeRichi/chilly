@@ -13,7 +13,7 @@ recommendations.
 - Runs a Strategist and a Challenger independently in parallel on the same Exa evidence, then has a
   Judge resolve disagreements into one plan. Tasks that still need clarification are clarified
   first.
-- Lets the user approve a plan before saving it to PostgreSQL or carrying out selected actions.
+- Lets the user approve a plan before saving it in the current browser or carrying out selected actions.
 - Tracks task progress, watches for relevant changes, and can send approved reminders through
   Telegram.
 - Creates calendar files for dated plan steps. Prepared email messages open in the user's mail app
@@ -25,19 +25,23 @@ recommendations.
 2. Install dependencies with `npm install`.
 3. Start the app with `npm run dev` and open [http://localhost:3000](http://localhost:3000).
 
-### Required configuration
+### Configuration
 
-| Variable         | Used for                                                           |
-| ---------------- | ------------------------------------------------------------------ |
-| `GEMINI_API_KEY` | Intake checks, direct baseline answers, and Chilly plan generation |
-| `EXA_API_KEY`    | Web research and background watches                                |
-| `DATABASE_URL`   | Saving approved tasks and tracking their progress                  |
+| Variable         | Used for                                                                   |
+| ---------------- | -------------------------------------------------------------------------- |
+| `GEMINI_API_KEY` | Intake checks, direct baseline answers, and Chilly plan generation         |
+| `EXA_API_KEY`    | Web research and background watches                                        |
+| `DATABASE_URL`   | Optional; required for background watches, reminders, and activity records |
 
-Database tables are created when first needed. Generating a plan does not save it; the user must
-approve it first.
+Database tables are created when first needed. Approving a plan stores it in this browser; Aiven is
+used only when an approved action needs background processing.
 
-Telegram is optional. Add a bot token, send the bot `/start`, then use **Connect** in the sidebar.
-The app fills in the chat ID during connection.
+Trying Chilly and saving tasks do not require an account. The Saved tasks list and checklist
+progress stay in the current browser and are not synced to other devices. When a user enables a
+background watch, reminder, or Telegram action, the server keeps the task snapshot and activity in
+Aiven PostgreSQL, keyed to a random device ID stored in that browser. Telegram is optional; each
+browser connects its own chat from the sidebar. Clearing browser data removes access to its local
+list and background settings.
 
 ## Demo flow
 

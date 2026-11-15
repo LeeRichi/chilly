@@ -9,7 +9,6 @@ import {
   draftTask,
   getUsage,
   runResearch,
-  saveProgress,
   type DraftInput,
 } from "./actions";
 import { executeApproved, getIntegrations, type ExecutedAction } from "./agent-actions";
@@ -23,10 +22,14 @@ import type { IntegrationStatus } from "@/lib/notify";
 import type { Clarification, PageImport } from "@/lib/schemas";
 import type { UsageSnapshot } from "@/lib/usage";
 import { MAX_CLARIFY_ROUNDS } from "@/lib/intake";
+import { getDeviceId, saveLocalTask, updateLocalProgress } from "@/lib/local-tasks";
 
 const starters = [
   { prompt: "I'm an international student in Finland. Which benefits can I apply for?" },
-  { prompt: "Help me track weather conditions so I know which date I should change my car to winter tyres." },
+  {
+    prompt:
+      "Help me track weather conditions so I know which date I should change my car to winter tyres.",
+  },
   // { prompt: "Find the cheapest fuel near me in Finland and tell me when prices are likely to be lower." },
   { prompt: "Help me win Junction today.", icon: "💀" },
   { prompt: "Track the latest Nvidia earnings and stock moves after Jensen Huang’s resignation." },
@@ -74,7 +77,7 @@ export default function Home() {
 
   useEffect(() => {
     void getUsage().then(setUsage);
-    void getIntegrations().then(setIntegrations);
+    void getIntegrations(getDeviceId()).then(setIntegrations);
   }, []);
   const ctx = useRef<Context | null>(null);
   const run = useRef(0); // bumps on every new task so stale async work is ignored
@@ -457,36 +460,43 @@ export default function Home() {
     if (!c || !step || step.kind !== "result") return;
     const { result, sources } = step.response;
     patch(stepId, { saving: true } as Partial<Step>);
-    const res = await approveAndSave({
+    const deviceId = getDeviceId();
+    const taskId = crypto.randomUUID();
+    const savedAt = new Date().toISOString();
+    const localTask = {
+      id: taskId,
       prompt: c.prompt,
       clarifications: c.clarifications,
       result,
       sources,
       progress: step.progress ?? {},
-    });
-    if (!res.ok) {
-      patch(stepId, { saving: false } as Partial<Step>);
-      add({
-        id: newId(),
-        kind: "saved",
-        status: "failed",
-        startedAt: Date.now(),
-        savedId: "",
-        savedAt: "",
-        error: res.error,
-        retry: () => void approve(stepId, selection),
-      });
-      return;
-    }
-    savedTaskId.current = res.data.id;
+      createdAt: savedAt,
+    };
+    saveLocalTask(localTask);
+    const needsBackend = selection.watches.length > 0 || selection.reminders || selection.telegram;
+    const backendTask = needsBackend
+      ? await approveAndSave(
+          {
+            prompt: c.prompt,
+            clarifications: c.clarifications,
+            result,
+            sources,
+            progress: step.progress ?? {},
+          },
+          deviceId,
+          taskId,
+        )
+      : { ok: true as const, data: { id: taskId, savedAt } };
+    saveLocalTask({ ...localTask, backgroundStored: needsBackend && backendTask.ok });
+    savedTaskId.current = taskId;
     add({
       id: newId(),
       kind: "saved",
       status: "done",
       startedAt: Date.now(),
       durationMs: 0,
-      savedId: res.data.id,
-      savedAt: res.data.savedAt,
+      savedId: taskId,
+      savedAt,
     });
 
     const execId = newId();
@@ -507,17 +517,32 @@ export default function Home() {
     }
     add({ id: execId, kind: "execute", status: "running", startedAt, actions: local });
 
-    const exec = await executeApproved(res.data.id, {
-      watches: selection.watches,
-      watchIntervals: Object.fromEntries(
-        Object.entries(selection.watchIntervals).map(([i, minutes]) => [i, minutes]),
-      ),
-      watchModes: Object.fromEntries(
-        Object.entries(selection.watchModes).map(([i, mode]) => [i, mode]),
-      ),
-      telegram: selection.telegram,
-      reminders: selection.reminders,
-    });
+    if (!needsBackend) {
+      patch(stepId, { saving: false } as Partial<Step>);
+      patch(execId, {
+        status: "done",
+        durationMs: Date.now() - startedAt,
+        actions: local,
+      } as Partial<Step>);
+      return;
+    }
+
+    const exec = backendTask.ok
+      ? await executeApproved(taskId, deviceId, {
+          watches: selection.watches,
+          watchIntervals: Object.fromEntries(
+            Object.entries(selection.watchIntervals).map(([i, minutes]) => [i, minutes]),
+          ),
+          watchModes: Object.fromEntries(
+            Object.entries(selection.watchModes).map(([i, mode]) => [i, mode]),
+          ),
+          telegram: selection.telegram,
+          reminders: selection.reminders,
+        })
+      : {
+          ok: false as const,
+          error: `Saved on this device. Background actions couldn't be started: ${backendTask.error}`,
+        };
     patch(stepId, { saving: false } as Partial<Step>);
     if (!exec.ok) {
       patch(execId, {
@@ -535,17 +560,17 @@ export default function Home() {
     } as Partial<Step>);
   }
 
-  /** Ticks are kept locally until approval; after that each tick is saved to the task in Aiven. */
+  /** Checklist progress stays in the browser; background activity is stored on the server. */
   function toggle(stepId: string, key: string, checked: boolean) {
     const step = steps.find((s) => s.id === stepId);
     if (!step || step.kind !== "result") return;
     const next = { ...step.progress, [key]: checked };
     const id = savedTaskId.current;
     patch(stepId, { progress: next, progressSaving: !!id } as Partial<Step>);
-    if (id)
-      void saveProgress(id, next).then(() =>
-        patch(stepId, { progressSaving: false } as Partial<Step>),
-      );
+    if (id) {
+      updateLocalProgress(id, next);
+    }
+    patch(stepId, { progressSaving: false } as Partial<Step>);
   }
 
   function newTask() {
@@ -574,7 +599,9 @@ export default function Home() {
           <div className="breadcrumb">
             WORKSPACE <span>/</span> NEW TASK
           </div>
-          <div className="topbar-right"><WorkspaceNav current="home" /></div>
+          <div className="topbar-right">
+            <WorkspaceNav current="home" />
+          </div>
         </header>
         <div className="content">
           <section className="landing-section" aria-label="Chilly introduction">
@@ -724,10 +751,7 @@ export default function Home() {
                 onNewTask={newTask}
               />
               {chillyResponse && (
-                <ComparisonPanel
-                  comparison={comparison}
-                  onCompare={compareWithDirectGemini}
-                />
+                <ComparisonPanel comparison={comparison} onCompare={compareWithDirectGemini} />
               )}
             </section>
           </section>

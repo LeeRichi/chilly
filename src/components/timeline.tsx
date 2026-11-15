@@ -57,7 +57,7 @@ export type Step = Base &
         answered?: Clarification[];
       }
     | { kind: "import"; page: PageImport }
-  | { kind: "agents"; turns: AgentTurn[]; note?: string }
+    | { kind: "agents"; turns: AgentTurn[]; note?: string }
     | {
         kind: "result";
         response: ResultResponse;
@@ -654,12 +654,13 @@ function ResultCard({
                     />
                     <span className="watch-heading-copy">
                       <span className="watch-live-label">
-                        <i />{" "}
-                        {sel.watchModes[i] === "demo" ? "DEMO SIMULATION" : "LIVE UPDATES"}
+                        <i /> {sel.watchModes[i] === "demo" ? "DEMO SIMULATION" : "LIVE UPDATES"}
                         {sel.watchModes[i] !== "demo" && (
                           <>
                             <span>· EXA</span>
-                            {sel.watchIntervals[i] >= 60 && <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>}
+                            {sel.watchIntervals[i] >= 60 && (
+                              <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>
+                            )}
                           </>
                         )}
                       </span>
@@ -671,8 +672,8 @@ function ResultCard({
                     {!sel.watches.includes(i)
                       ? "Updates are off until this watch is selected"
                       : tgOk
-                      ? `New matching updates will be sent to Telegram · ${integrations?.telegram.chatName}`
-                      : "New updates will appear in the saved task · connect Telegram for alerts"}
+                        ? `New matching updates will be sent to Telegram · ${integrations?.telegram.chatName}`
+                        : "New updates will appear in the saved task · connect Telegram for alerts"}
                   </div>
                   <div className="watch-demo-control">
                     <span>Demo mode</span>
@@ -736,7 +737,8 @@ function ResultCard({
                         ))}
                       </div>
                       <small>
-                        {sel.watchIntervals[i] >= 60 ? "Exa Deep" : "Exa Auto"} fresh-fetches new pages at this interval · ~$0.02 per check
+                        {sel.watchIntervals[i] >= 60 ? "Exa Deep" : "Exa Auto"} fresh-fetches new
+                        pages at this interval · ~$0.02 per check
                       </small>
                     </div>
                   )}
@@ -760,7 +762,7 @@ function ResultCard({
                 checked
                 locked
                 label="Save the plan and its sources"
-                detail="To your Saved tasks (Aiven PostgreSQL)"
+                detail="Saved in this browser · no account needed"
                 cost="free"
               />
             </div>
@@ -841,7 +843,11 @@ function AgentConversationStep({ step }: { step: Extract<Step, { kind: "agents" 
       <section className="agent-conversation" aria-label="Multi-agent conversation">
         <div className="agent-conversation-heading">
           <span className="block-label">MULTI-AGENT REVIEW</span>
-          <span>{step.turns.some((turn) => turn.role === "judge") ? "STRATEGIST ∥ CHALLENGER → JUDGE" : "STRATEGIST ↔ CHALLENGER"}</span>
+          <span>
+            {step.turns.some((turn) => turn.role === "judge")
+              ? "STRATEGIST ∥ CHALLENGER → JUDGE"
+              : "STRATEGIST ↔ CHALLENGER"}
+          </span>
         </div>
         <div className="agent-chat-thread">
           {step.note && <p className="tl-reason">{step.note}</p>}
@@ -874,11 +880,45 @@ function agentRoleLabel(role: AgentRole) {
 }
 
 function AgentAvatar({ role }: { role: AgentRole }) {
-  const palette = role === "judge"
-    ? { shellStart: "#b6edff", shellMid: "#4a8da5", shellEnd: "#234b5b", antenna: "#78d8f2", antennaGlow: "#b1efff", side: "#315f70", shellStroke: "#71c3db", eye: "#b2efff", mouth: "#78d8f2", mouthPath: "M27 40h10" }
-    : role === "challenger" || role === "demo_judge" || role === "builder"
-      ? { shellStart: "#ffc27e", shellMid: "#b9713f", shellEnd: "#603c2c", antenna: "#ed9a5c", antennaGlow: "#ffb174", side: "#8e5238", shellStroke: "#d58b5c", eye: "#ffbd83", mouth: "#f29a66", mouthPath: "M27 40h10" }
-      : { shellStart: "#efff9b", shellMid: "#8fa63b", shellEnd: "#465625", antenna: "#d9f578", antennaGlow: "#e5ff87", side: "#687b31", shellStroke: "#d9ef8b", eye: "#e2ff79", mouth: "#b7d95b", mouthPath: "M28 40h8" };
+  const palette =
+    role === "judge"
+      ? {
+          shellStart: "#b6edff",
+          shellMid: "#4a8da5",
+          shellEnd: "#234b5b",
+          antenna: "#78d8f2",
+          antennaGlow: "#b1efff",
+          side: "#315f70",
+          shellStroke: "#71c3db",
+          eye: "#b2efff",
+          mouth: "#78d8f2",
+          mouthPath: "M27 40h10",
+        }
+      : role === "challenger" || role === "demo_judge" || role === "builder"
+        ? {
+            shellStart: "#ffc27e",
+            shellMid: "#b9713f",
+            shellEnd: "#603c2c",
+            antenna: "#ed9a5c",
+            antennaGlow: "#ffb174",
+            side: "#8e5238",
+            shellStroke: "#d58b5c",
+            eye: "#ffbd83",
+            mouth: "#f29a66",
+            mouthPath: "M27 40h10",
+          }
+        : {
+            shellStart: "#efff9b",
+            shellMid: "#8fa63b",
+            shellEnd: "#465625",
+            antenna: "#d9f578",
+            antennaGlow: "#e5ff87",
+            side: "#687b31",
+            shellStroke: "#d9ef8b",
+            eye: "#e2ff79",
+            mouth: "#b7d95b",
+            mouthPath: "M28 40h8",
+          };
   const prefix = role;
 
   return (
@@ -912,22 +952,8 @@ function AgentAvatar({ role }: { role: AgentRole }) {
             strokeWidth="3"
           />
           <circle cx="32" cy="7" r="3.5" fill={palette.antennaGlow} />
-          <rect
-            x="7"
-            y="27"
-            width="8"
-            height="17"
-            rx="4"
-            fill={palette.side}
-          />
-          <rect
-            x="49"
-            y="27"
-            width="8"
-            height="17"
-            rx="4"
-            fill={palette.side}
-          />
+          <rect x="7" y="27" width="8" height="17" rx="4" fill={palette.side} />
+          <rect x="49" y="27" width="8" height="17" rx="4" fill={palette.side} />
           <rect
             x="12"
             y="14"
@@ -1125,15 +1151,7 @@ export function Timeline(props: {
             return <ExecuteStep key={step.id} step={step} />;
           case "saved":
             return (
-              <StepShell
-                key={step.id}
-                step={step}
-                title={
-                  <>
-                    Saved to <span className="aiven-badge">Aiven</span>
-                  </>
-                }
-              >
+              <StepShell key={step.id} step={step} title={<>Saved on this device</>}>
                 {step.status === "done" && (
                   <>
                     <p className="tl-reason">

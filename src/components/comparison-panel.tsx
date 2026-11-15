@@ -16,14 +16,6 @@ export function ComparisonPanel({
 }) {
   const [open, setOpen] = useState(true);
 
-  // Match timeline sessions: completed comparisons fold; failures stay open.
-  const shouldOpen = comparison?.status !== "done";
-  const [lastComparisonStatus, setLastComparisonStatus] = useState(comparison?.status);
-  if (lastComparisonStatus !== comparison?.status) {
-    setLastComparisonStatus(comparison?.status);
-    setOpen(shouldOpen);
-  }
-
   return (
     <section
       className="comparison-panel"

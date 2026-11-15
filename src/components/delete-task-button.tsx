@@ -3,12 +3,19 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteSavedTaskAction } from "@/app/agent-actions";
+import { removeLocalTask } from "@/lib/local-tasks";
 
 export function DeleteTaskButton({
   taskId,
+  deviceId,
+  backgroundStored = false,
+  onDeleted,
   redirectOnDelete = false,
 }: {
   taskId: string;
+  deviceId: string;
+  backgroundStored?: boolean;
+  onDeleted?: () => void;
   redirectOnDelete?: boolean;
 }) {
   const router = useRouter();
@@ -21,15 +28,19 @@ export function DeleteTaskButton({
     if (busy) return;
     setBusy(true);
     setError("");
-    const result = await deleteSavedTaskAction(taskId);
-    if (result.ok) {
-      setConfirming(false);
-      if (redirectOnDelete) router.push("/tasks");
-      router.refresh();
-    } else {
-      setError(result.error);
-      setBusy(false);
+    removeLocalTask(taskId);
+    onDeleted?.();
+    setConfirming(false);
+    if (redirectOnDelete) router.push("/tasks");
+    if (backgroundStored) {
+      try {
+        await deleteSavedTaskAction(taskId, deviceId);
+      } catch {
+        setError("Removed locally; the background server record couldn’t be cleaned up.");
+      }
     }
+    setBusy(false);
+    router.refresh();
   }
 
   return (

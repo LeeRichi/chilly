@@ -20,28 +20,33 @@ import {
   type WatchRun,
 } from "@/lib/agent-store";
 import {
-  connectTelegram,
+  finishTelegramLinkForUser,
   integrationStatus,
   sendTelegram,
+  startTelegramLink,
   type IntegrationStatus,
 } from "@/lib/notify";
 import { approvalSchema, type Approval } from "@/lib/schemas";
-import { getTask } from "@/lib/tasks";
 import { helsinkiClock, helsinkiDayTime, helsinkiLocalToDate } from "@/lib/time";
 import { getLimits, snapshot, type UsageSnapshot } from "@/lib/usage";
 import { runWatch, type WatchRunResult } from "@/lib/watch-runner";
+import { getOwnedTask } from "@/lib/tasks";
+import { deviceOwnsTask } from "@/lib/users";
+import { validDeviceId } from "@/lib/device";
 
 const uuid = z.string().uuid();
 
-export async function getIntegrations(): Promise<IntegrationStatus> {
-  return integrationStatus();
+export async function getIntegrations(deviceId?: string): Promise<IntegrationStatus> {
+  return integrationStatus(deviceId && validDeviceId(deviceId) ? deviceId : undefined);
 }
 
-export async function deleteSavedTaskAction(taskId: string) {
+export async function deleteSavedTaskAction(taskId: string, deviceId: string) {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false as const, error: "Local workspace not found." };
   const id = uuid.safeParse(taskId);
   if (!id.success) return { ok: false as const, error: "Invalid task." };
   try {
-    const deleted = await deleteTaskAndActivity(id.data);
+    const deleted = await deleteTaskAndActivity(id.data, ownerId);
     return deleted ? { ok: true as const } : { ok: false as const, error: "Task not found." };
   } catch (error) {
     return {
@@ -51,9 +56,26 @@ export async function deleteSavedTaskAction(taskId: string) {
   }
 }
 
-export async function connectTelegramAction() {
+export async function startTelegramConnectAction(deviceId: string) {
   try {
-    return await connectTelegram();
+    const ownerId = validDeviceId(deviceId);
+    return ownerId
+      ? await startTelegramLink(ownerId)
+      : { ok: false as const, error: "Local workspace not found." };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Telegram failed.",
+    };
+  }
+}
+
+export async function finishTelegramConnectAction(deviceId: string) {
+  try {
+    const ownerId = validDeviceId(deviceId);
+    return ownerId
+      ? await finishTelegramLinkForUser(ownerId)
+      : { ok: false as const, error: "Local workspace not found." };
   } catch (error) {
     return {
       ok: false as const,
@@ -80,15 +102,18 @@ export type ExecutedAction = {
  */
 export async function executeApproved(
   taskId: string,
+  deviceId: string,
   approval: Approval,
 ): Promise<
   { ok: true; actions: ExecutedAction[]; usage: UsageSnapshot } | { ok: false; error: string }
 > {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false, error: "Local workspace not found." };
   const id = uuid.safeParse(taskId);
   const parsed = approvalSchema.safeParse(approval);
   if (!id.success || !parsed.success) return { ok: false, error: "Invalid approval." };
 
-  const task = await getTask(id.data).catch(() => null);
+  const task = await getOwnedTask(id.data, ownerId).catch(() => null);
   if (!task) return { ok: false, error: "Saved task not found." };
   const { result } = task;
   const out: ExecutedAction[] = [];
@@ -105,8 +130,8 @@ export async function executeApproved(
 
   // 1. Background watches
   const limits = getLimits();
-  const telegramConnected = integrationStatus().telegram.connected;
-  let active = await countActiveWatches().catch(() => 0);
+  const telegramConnected = (await integrationStatus(ownerId)).telegram.connected;
+  let active = await countActiveWatches(ownerId).catch(() => 0);
   for (const i of [...new Set(parsed.data.watches)]) {
     const w = result.watches[i];
     if (!w) continue;
@@ -188,7 +213,7 @@ export async function executeApproved(
         .join("\n");
       return { sendAt, stepAt: s.date, text };
     });
-    const tg = integrationStatus().telegram;
+    const tg = (await integrationStatus(ownerId)).telegram;
     if (!tg.connected) {
       await record(
         "telegram",
@@ -222,6 +247,7 @@ export async function executeApproved(
       .map((a) => `• ${a.kind === "watch" ? "👁" : "⏰"} ${a.label} — ${a.detail}`);
     const sent = await sendTelegram(
       `✅ Chilly handled: ${result.title}\n\n${lines.join("\n") || "• Plan saved"}${result.keyChecks.length ? `\n\nStill to check:\n${result.keyChecks.map((k) => `• ${k}`).join("\n")}` : ""}`,
+      task.id,
     );
     await record(
       "telegram",
@@ -245,7 +271,11 @@ export type TaskActivity = {
   reminders: Reminder[];
 };
 
-export async function getTaskActivity(taskId: string): Promise<TaskActivity> {
+export async function getTaskActivity(taskId: string, deviceId: string): Promise<TaskActivity> {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { actions: [], watches: [], runs: [], reminders: [] };
+  if (!(await getOwnedTask(taskId, ownerId)))
+    return { actions: [], watches: [], runs: [], reminders: [] };
   const id = uuid.safeParse(taskId);
   if (!id.success) return { actions: [], watches: [], runs: [], reminders: [] };
   const [actions, watches, reminders] = await Promise.all([
@@ -257,9 +287,11 @@ export async function getTaskActivity(taskId: string): Promise<TaskActivity> {
   return { actions, watches, runs, reminders };
 }
 
-export async function cancelReminderAction(reminderId: string) {
+export async function cancelReminderAction(reminderId: string, deviceId: string) {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false };
   if (!uuid.safeParse(reminderId).success) return { ok: false };
-  const taskId = await cancelReminder(reminderId);
+  const taskId = await cancelReminder(reminderId, ownerId);
   if (taskId)
     await logAction(taskId, "telegram", "Reminder", "skipped", {
       detail: "Cancelled by you",
@@ -268,12 +300,14 @@ export async function cancelReminderAction(reminderId: string) {
 }
 
 /** For demos: schedules a Telegram reminder one minute from now for this task. */
-export async function testReminderAction(taskId: string) {
+export async function testReminderAction(taskId: string, deviceId: string) {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false as const, error: "Local workspace not found." };
   const id = uuid.safeParse(taskId);
   if (!id.success) return { ok: false as const, error: "Invalid task." };
-  if (!integrationStatus().telegram.connected)
+  if (!(await integrationStatus(ownerId)).telegram.connected)
     return { ok: false as const, error: "Connect Telegram in the sidebar first." };
-  const task = await getTask(id.data);
+  const task = await getOwnedTask(id.data, ownerId);
   if (!task) return { ok: false as const, error: "Task not found." };
   const sendAt = new Date(Date.now() + 60_000);
   const first = task.result.timeline[0];
@@ -293,15 +327,24 @@ export async function testReminderAction(taskId: string) {
 /** Runs a watch right now (counts against the same budget). */
 export async function checkWatchNow(
   watchId: string,
+  deviceId: string,
 ): Promise<WatchRunResult & { usage?: UsageSnapshot }> {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false, error: "Local workspace not found." };
   if (!uuid.safeParse(watchId).success) return { ok: false, error: "Invalid watch." };
+  const watch = await getWatchWithSeen(watchId);
+  if (!watch || !(await deviceOwnsTask(ownerId, watch.taskId)))
+    return { ok: false, error: "Watch not found." };
   const res = await runWatch(watchId, "manual");
   return { ...res, usage: snapshot() };
 }
 
-export async function stopWatch(watchId: string) {
+export async function stopWatch(watchId: string, deviceId: string) {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false };
   if (!uuid.safeParse(watchId).success) return { ok: false };
   const watch = await getWatchWithSeen(watchId);
+  if (!watch || !(await deviceOwnsTask(ownerId, watch.taskId))) return { ok: false };
   const ok = await setWatchActive(watchId, false);
   if (ok && watch)
     await logAction(watch.taskId, "watch", watch.reason, "skipped", {

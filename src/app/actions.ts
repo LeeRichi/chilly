@@ -8,6 +8,7 @@ import { getExaClient } from "@/lib/exa";
 import { insertTask, updateProgress } from "@/lib/tasks";
 import { loadResearch, saveResearch, type StoredResult } from "@/lib/research-store";
 import { MAX_CLARIFY_ROUNDS } from "@/lib/intake";
+import { validDeviceId } from "@/lib/device";
 import {
   checkGemini,
   recordExaCacheHit,
@@ -50,7 +51,10 @@ const EXA_MAX_AGE_HOURS = Number(process.env.BUTLER_EXA_MAX_AGE_HOURS ?? 24);
 const taskIdSchema = z.string().uuid();
 
 export async function getUsage(taskId?: string): Promise<UsageSnapshot> {
-  return snapshot(taskId && taskIdSchema.safeParse(taskId).success ? taskId : undefined);
+  if (taskId && taskIdSchema.safeParse(taskId).success) {
+    return snapshot(taskId);
+  }
+  return snapshot();
 }
 
 // Identical requests within a few hours reuse earlier results: rehearsing the demo costs nothing.
@@ -531,7 +535,8 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
     let model: string;
     let agentConversation: AgentTurn[] = [];
     const dailyUsage = snapshot();
-    const agentSlotsAvailable = dailyUsage.day.geminiCalls + 3 <= dailyUsage.limits.geminiDailyCalls;
+    const agentSlotsAvailable =
+      dailyUsage.day.geminiCalls + 3 <= dailyUsage.limits.geminiDailyCalls;
     const needsChallengeChoice = competitionStrategy && !challengeChosen && !mustFinish;
     const runParallelReview = !needsChallengeChoice && agentSlotsAvailable;
 
@@ -541,12 +546,14 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
         {
           role: "strategist" as const,
           label: "Strategist",
-          focus: "Independently develop the strongest evidence-grounded answer for the user's goal, with practical choices and next steps.",
+          focus:
+            "Independently develop the strongest evidence-grounded answer for the user's goal, with practical choices and next steps.",
         },
         {
           role: "challenger" as const,
           label: "Challenger",
-          focus: "Independently analyze the same task and evidence. Find a credible alternative, challenge the weakest assumption, and identify important risks or missing information. Do not refer to or assume knowledge of another agent's proposal.",
+          focus:
+            "Independently analyze the same task and evidence. Find a credible alternative, challenge the weakest assumption, and identify important risks or missing information. Do not refer to or assume knowledge of another agent's proposal.",
         },
       ];
       type Peer = (typeof peers)[number];
@@ -592,7 +599,9 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
         "Compare their proposals, resolve disagreements using the user's goal and the numbered evidence, and create the final structured response. Do not automatically favor either agent. If key user-specific information is still missing, use kind=clarify; otherwise use kind=result.",
         "In decision, explain what you accepted, rejected or combined, and why. Cite factual claims in the final result using the evidence numbers.",
         `User task and evidence:\n${prompt}`,
-        ...completedPeers.map(({ peer, response }) => `${peer.label}:\n${response.object.contribution}`),
+        ...completedPeers.map(
+          ({ peer, response }) => `${peer.label}:\n${response.object.contribution}`,
+        ),
       ].join("\n\n");
       const judgeAttempt = { count: 0 };
       try {
@@ -649,9 +658,10 @@ export async function draftTask(raw: DraftInput): Promise<ActionResult<DraftResp
       liveUpdateReason: object.shouldOfferLiveUpdates
         ? object.liveUpdateReason.trim().slice(0, 240)
         : "",
-      agentReviewNote: !needsChallengeChoice && !agentSlotsAvailable
-        ? "Parallel review skipped because the daily Gemini budget has fewer than three calls available."
-        : "",
+      agentReviewNote:
+        !needsChallengeChoice && !agentSlotsAvailable
+          ? "Parallel review skipped because the daily Gemini budget has fewer than three calls available."
+          : "",
     };
 
     let data: DraftResponse;
@@ -1068,13 +1078,18 @@ async function generateWithFallback<T>(
 
 export async function approveAndSave(
   task: SavedTask,
+  deviceId: string,
+  taskId: string,
 ): Promise<ActionResult<{ id: string; savedAt: string }>> {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false, error: "This browser's local workspace is unavailable." };
+  if (!taskIdSchema.safeParse(taskId).success) return { ok: false, error: "Invalid task ID." };
   const parsed = savedTaskSchema.safeParse(task);
   if (!parsed.success)
     return { ok: false, error: "This result is invalid. Run the task again before saving." };
 
   try {
-    return { ok: true, data: await insertTask(parsed.data) };
+    return { ok: true, data: await insertTask(parsed.data, ownerId, taskId) };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
@@ -1084,12 +1099,15 @@ export async function approveAndSave(
 export async function saveProgress(
   taskId: string,
   progress: Progress,
+  deviceId: string,
 ): Promise<ActionResult<{ savedAt: string }>> {
+  const ownerId = validDeviceId(deviceId);
+  if (!ownerId) return { ok: false, error: "This browser's local workspace is unavailable." };
   const id = taskIdSchema.safeParse(taskId);
   const parsed = progressSchema.safeParse(progress);
   if (!id.success || !parsed.success) return { ok: false, error: "Invalid checklist update." };
   try {
-    const found = await updateProgress(id.data, parsed.data);
+    const found = await updateProgress(id.data, parsed.data, ownerId);
     return found
       ? { ok: true, data: { savedAt: new Date().toISOString() } }
       : { ok: false, error: "Task not found." };

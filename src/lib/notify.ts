@@ -1,115 +1,125 @@
 import "server-only";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { randomBytes } from "node:crypto";
 import { recordTelegram } from "@/lib/usage";
-
-/* ------------------------------------------------------------------ */
-/* Status (names only, never values)                                    */
-/* ------------------------------------------------------------------ */
+import {
+  finishTelegramLink,
+  ownerForTask,
+  setTelegramLinkCode,
+  telegramConnection,
+  telegramLinkCode,
+} from "@/lib/users";
 
 export type IntegrationStatus = {
   telegram: { configured: boolean; connected: boolean; chatName?: string; missing: string[] };
 };
 
-export function integrationStatus(): IntegrationStatus {
-  const tgMissing = ["TELEGRAM_BOT_TOKEN"].filter((k) => !process.env[k]);
-  const chat = telegramChat();
-  return {
-    telegram: {
-      configured: tgMissing.length === 0,
-      connected: tgMissing.length === 0 && !!chat,
-      chatName: chat?.name,
-      missing: tgMissing,
-    },
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Telegram                                                             */
-/* ------------------------------------------------------------------ */
-
-const SETTINGS = path.join(process.cwd(), ".butler", "settings.json");
-type Settings = { telegramChatId?: number; telegramChatName?: string };
-
-function readSettings(): Settings {
-  try {
-    return JSON.parse(readFileSync(SETTINGS, "utf8")) as Settings;
-  } catch {
-    return {};
-  }
-}
-
-function telegramChat(): { id: string; name: string } | null {
-  if (process.env.TELEGRAM_CHAT_ID)
-    return { id: process.env.TELEGRAM_CHAT_ID, name: "configured chat" };
-  const s = readSettings();
-  return s.telegramChatId
-    ? { id: String(s.telegramChatId), name: s.telegramChatName || "your chat" }
-    : null;
-}
-
+type TelegramResult<T> = { ok: boolean; result?: T; description?: string };
 async function telegram<T>(
   method: string,
   body?: Record<string, unknown>,
-): Promise<{ ok: boolean; result?: T; description?: string }> {
+): Promise<TelegramResult<T>> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return { ok: false, description: "TELEGRAM_BOT_TOKEN is missing." };
+  if (!token) return { ok: false, description: "Telegram bot isn't configured." };
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
     signal: AbortSignal.timeout(15_000),
   });
-  return (await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status}` }))) as {
-    ok: boolean;
-    result?: T;
-    description?: string;
+  return (await res
+    .json()
+    .catch(() => ({ ok: false, description: `HTTP ${res.status}` }))) as TelegramResult<T>;
+}
+
+export async function integrationStatus(deviceId?: string): Promise<IntegrationStatus> {
+  const hasBot = !!process.env.TELEGRAM_BOT_TOKEN;
+  const configured = hasBot && !!process.env.DATABASE_URL;
+  const chat = configured && deviceId ? await telegramConnection(deviceId) : null;
+  return {
+    telegram: {
+      configured,
+      connected: configured && !!chat,
+      chatName: chat?.name,
+      missing: configured
+        ? deviceId
+          ? []
+          : ["Open Chilly on this browser to connect Telegram"]
+        : [hasBot ? "DATABASE_URL (needed for Telegram setup)" : "TELEGRAM_BOT_TOKEN"],
+    },
   };
 }
 
-/** Finds the chat of whoever last messaged the bot (send it /start first) and remembers it. */
-export async function connectTelegram(): Promise<
-  { ok: true; chatName: string } | { ok: false; error: string }
-> {
+/** Starts a Telegram link for this browser's workspace. */
+export async function startTelegramLink(
+  userId: string,
+): Promise<{ ok: true; link: string } | { ok: false; error: string }> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return { ok: false, error: "Telegram bot isn't configured." };
+  const me = await telegram<{ username?: string }>("getMe");
+  if (!me.ok || !me.result?.username)
+    return { ok: false, error: me.description || "Couldn't load the Telegram bot." };
+  const code = randomBytes(16).toString("hex");
+  await setTelegramLinkCode(userId, code);
+  return { ok: true, link: `https://t.me/${me.result.username}?start=${code}` };
+}
+
+/** Completes only the link challenge issued to this user; another visitor's /start cannot be selected. */
+export async function finishTelegramLinkForUser(
+  userId: string,
+): Promise<{ ok: true; chatName: string } | { ok: false; error: string }> {
+  const code = await telegramLinkCode(userId);
+  if (!code) return { ok: false, error: "Connection link expired. Start again." };
   type Update = {
-    message?: { chat: { id: number; first_name?: string; username?: string; title?: string } };
+    message?: {
+      text?: string;
+      chat: { id: number; first_name?: string; username?: string; title?: string };
+    };
   };
-  const res = await telegram<Update[]>("getUpdates", { limit: 20 });
-  if (!res.ok) return { ok: false, error: res.description || "Telegram request failed." };
-  const chat = [...(res.result ?? [])].reverse().find((u) => u.message)?.message?.chat;
-  if (!chat)
+  const updates = await telegram<Update[]>("getUpdates", {
+    limit: 100,
+    allowed_updates: ["message"],
+  });
+  if (!updates.ok) return { ok: false, error: updates.description || "Telegram request failed." };
+  const message = (updates.result ?? []).find(
+    (u) => u.message?.text?.trim() === `/start ${code}`,
+  )?.message;
+  if (!message)
     return {
       ok: false,
-      error: "No messages yet. Open your bot in Telegram, send /start, then try again.",
+      error: "Open the Telegram link and press Start, then finish connecting here.",
     };
-  const chatName = chat.username
-    ? `@${chat.username}`
-    : chat.first_name || chat.title || "your chat";
-  mkdirSync(path.dirname(SETTINGS), { recursive: true });
-  writeFileSync(
-    SETTINGS,
-    JSON.stringify(
-      { ...readSettings(), telegramChatId: chat.id, telegramChatName: chatName },
-      null,
-      2,
-    ),
+  const chatName = message.chat.username
+    ? `@${message.chat.username}`
+    : message.chat.first_name || message.chat.title || "Telegram chat";
+  const linked = await finishTelegramLink(userId, code, String(message.chat.id), chatName);
+  if (!linked) return { ok: false, error: "Connection link expired. Start again." };
+  const sent = await sendToChat(
+    String(message.chat.id),
+    "✅ Chilly is connected. Your task updates will come here.",
   );
-  await sendTelegram("✅ Chilly is connected. You'll get task updates here.");
+  if (sent) recordTelegram();
   return { ok: true, chatName };
+}
+
+async function sendToChat(chatId: string, text: string) {
+  const result = await telegram("sendMessage", {
+    chat_id: chatId,
+    text: text.slice(0, 4000),
+    disable_web_page_preview: true,
+  });
+  return result.ok;
 }
 
 export async function sendTelegram(
   text: string,
+  taskId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const chat = telegramChat();
-  if (!chat) return { ok: false, error: "Telegram isn't connected yet." };
+  const ownerId = await ownerForTask(taskId);
+  const chat = ownerId ? await telegramConnection(ownerId) : null;
+  if (!chat) return { ok: false, error: "This task owner hasn't connected Telegram." };
   try {
-    const res = await telegram("sendMessage", {
-      chat_id: chat.id,
-      text: text.slice(0, 4000),
-      disable_web_page_preview: true,
-    });
-    if (!res.ok) return { ok: false, error: res.description || "Telegram send failed." };
+    const sent = await sendToChat(chat.id, text);
+    if (!sent) return { ok: false, error: "Telegram send failed." };
     recordTelegram();
     return { ok: true };
   } catch (error) {

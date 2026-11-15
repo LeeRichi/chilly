@@ -42,6 +42,7 @@ export async function runWatch(
     if (watch.notifyTelegram) {
       await sendTelegram(
         `🧪 [DEMO] Simulated news update for “${watch.reason}”\n\n${title}\n\nThis is fake demo data, not a real article.`,
+        watch.taskId,
       );
     }
     console.log(`[butler] demo watch ${id.slice(0, 8)} triggered a simulated update`);
@@ -111,6 +112,7 @@ export async function runWatch(
         .join("\n");
       await sendTelegram(
         `👁 Chilly found ${hits.length} new update${hits.length === 1 ? "" : "s"} for “${watch.reason}”\n\n${lines}`,
+        watch.taskId,
       );
     }
     return { ok: true, hits, costUsd: cost, checkedSince: since };
@@ -134,7 +136,7 @@ export async function runDueWatches() {
 export async function runDueReminders() {
   const due = await claimDueReminders();
   for (const r of due) {
-    const sent = await sendTelegram(r.text);
+    const sent = await sendTelegram(r.text, r.taskId);
     await finishReminder(r.id, sent.ok, sent.ok ? undefined : sent.error);
     console.log(
       `[butler] reminder ${r.id.slice(0, 8)} ${sent.ok ? "sent" : `failed: ${sent.error}`}`,

@@ -1,26 +1,53 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { connectTelegramAction, getIntegrations } from "@/app/agent-actions";
+import {
+  finishTelegramConnectAction,
+  getIntegrations,
+  startTelegramConnectAction,
+} from "@/app/agent-actions";
 import type { IntegrationStatus } from "@/lib/notify";
+import { getDeviceId } from "@/lib/local-tasks";
 
 export function IntegrationsPanel() {
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState("");
+  const [telegramLink, setTelegramLink] = useState("");
+  const [deviceId] = useState(() => (typeof window === "undefined" ? "" : getDeviceId()));
 
   useEffect(() => {
-    void getIntegrations().then(setStatus);
-  }, []);
+    if (deviceId)
+      void getIntegrations(deviceId)
+        .then(setStatus)
+        .catch(() =>
+          setStatus({
+            telegram: {
+              configured: false,
+              connected: false,
+              missing: ["Background storage is unavailable"],
+            },
+          }),
+        );
+  }, [deviceId]);
 
   async function connect() {
     setConnecting(true);
     setMessage("");
-    const res = await connectTelegramAction();
+    const res = await startTelegramConnectAction(deviceId);
+    setConnecting(false);
+    if (res.ok) setTelegramLink(res.link);
+    else setMessage(res.error);
+  }
+
+  async function finishConnect() {
+    setConnecting(true);
+    const res = await finishTelegramConnectAction(deviceId);
     setConnecting(false);
     if (res.ok) {
       setMessage(`Connected to ${res.chatName}. Check Telegram for a test message.`);
-      setStatus(await getIntegrations());
+      setTelegramLink("");
+      setStatus(await getIntegrations(deviceId));
     } else setMessage(res.error);
   }
 
@@ -42,15 +69,26 @@ export function IntegrationsPanel() {
             {telegram.connected
               ? `Connected · ${telegram.chatName}`
               : telegram.configured
-                ? "Send /start to your bot, then connect"
-                : `Add ${telegram.missing.join(" + ")}`}
+                ? telegram.missing[0] || "Open the bot link and press Start"
+                : telegram.missing[0] || "Connect your Telegram chat"}
           </small>
         </span>
-        {telegram.configured && !telegram.connected && (
-          <button className="ghost-button" onClick={connect} disabled={connecting}>
-            {connecting ? "…" : "Connect"}
-          </button>
-        )}
+        {telegram.configured &&
+          !telegram.connected &&
+          (telegramLink ? (
+            <div className="telegram-connect-actions">
+              <a className="ghost-button" href={telegramLink} target="_blank" rel="noreferrer">
+                Open Telegram ↗
+              </a>
+              <button className="ghost-button" onClick={finishConnect} disabled={connecting}>
+                {connecting ? "…" : "Finish"}
+              </button>
+            </div>
+          ) : (
+            <button className="ghost-button" onClick={connect} disabled={connecting}>
+              {connecting ? "…" : "Connect"}
+            </button>
+          ))}
       </div>
       {message && <p className="usage-note">{message}</p>}
     </div>
