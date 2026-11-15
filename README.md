@@ -137,6 +137,16 @@ downloaded as an `.ics` file. Watches and reminders require the user's approval;
 require an active connection. Selecting a watch opts into Telegram alerts for new updates when
 Telegram is connected. The separate Telegram option sends only the one-time plan summary.
 
+### Vercel deployment
+
+Vercel runs the app's Next.js server actions and API routes, so the core research flow does not need a
+separate app server. Background watches and reminders are different: `src/instrumentation.ts` starts
+a process-local interval that calls `/api/watches/tick`, which is suitable for a long-lived Node
+server but is not reliable on Vercel Functions, where instances can be suspended or replaced. To
+run those actions reliably on Vercel, configure Vercel Cron or a persistent worker and update the
+tick route's current `x-butler-tick` authentication to match that scheduler. They also require
+`DATABASE_URL` for shared task and activity records.
+
 ## Limits and optional settings
 
 Defaults are listed in `.env.example`. They can be overridden in the server environment.
@@ -158,7 +168,10 @@ Defaults are listed in `.env.example`. They can be overridden in the server envi
 
 Intake checks, direct Gemini comparisons, and plan drafting use the configured Gemini model fallback
 list and count against the daily Gemini request limit. Exa cost estimates reserve budget before a
-search; the ledger is updated to the reported cost when Exa returns it.
+search; the ledger is updated to the reported cost when Exa returns it. Locally, the usage ledger is
+stored in `.butler/usage.json`. On Vercel it uses writable `/tmp` scratch space, which is temporary
+and isolated to a function instance, so the displayed daily totals are best-effort rather than a
+global hard spending limit.
 
 ## Development
 
