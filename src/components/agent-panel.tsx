@@ -117,11 +117,15 @@ export function AgentPanel({
   }
 
   const newHits = data.runs.flatMap((r) =>
-    r.hits.map((h) => ({
-      ...h,
-      ranAt: r.ranAt,
-      watch: data.watches.find((w) => w.id === r.watchId)?.reason,
-    })),
+    r.hits.map((h) => {
+      const watch = data.watches.find((item) => item.id === r.watchId);
+      return {
+        ...h,
+        ranAt: r.ranAt,
+        watch: watch?.reason,
+        exaDeep: !h.demo && !watch?.demoMode && (watch?.everyMinutes ?? 0) >= 60,
+      };
+    }),
   );
 
   return (
@@ -205,6 +209,9 @@ export function AgentPanel({
                       <b className={h.demo ? "demo-hit-badge" : "new-badge"}>
                         {h.demo ? "DEMO" : "NEW"}
                       </b>
+                      {h.exaDeep && (
+                        <span className="exa-badge exa-deep-watch-badge">EXA DEEP</span>
+                      )}
                       {h.demo
                         ? "SIMULATED · NO SOURCE"
                         : new URL(h.url).hostname.replace(/^www\./, "")}
