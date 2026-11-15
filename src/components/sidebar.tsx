@@ -7,9 +7,16 @@ import type { UsageSnapshot } from "@/lib/usage";
 import { IntegrationsPanel } from "./integrations-panel";
 import { UsageMeter } from "./usage-meter";
 import { PepperIcon } from "./pepper-icon";
+import type { IntegrationStatus } from "@/lib/notify";
 
 /** Shared sidebar. Pass `usage` to show live numbers from the current task; otherwise it loads today's totals. */
-export function Sidebar({ usage }: { usage?: UsageSnapshot | null }) {
+export function Sidebar({
+  usage,
+  onIntegrationsChange,
+}: {
+  usage?: UsageSnapshot | null;
+  onIntegrationsChange?: (status: IntegrationStatus) => void;
+}) {
   const [own, setOwn] = useState<UsageSnapshot | null>(null);
 
   useEffect(() => {
@@ -30,7 +37,7 @@ export function Sidebar({ usage }: { usage?: UsageSnapshot | null }) {
       <div className="side-label">API BUDGET · TODAY</div>
       <UsageMeter usage={usage === undefined ? own : usage} />
       <div className="side-label side-gap">CAN ACT THROUGH</div>
-      <IntegrationsPanel />
+      <IntegrationsPanel onStatusChange={onIntegrationsChange} />
       <div className="side-bottom">
         <div className="secure-icon">◈</div>
         <p>

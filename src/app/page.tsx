@@ -11,7 +11,7 @@ import {
   runResearch,
   type DraftInput,
 } from "./actions";
-import { executeApproved, getIntegrations, type ExecutedAction } from "./agent-actions";
+import { executeApproved, type ExecutedAction } from "./agent-actions";
 import { Timeline, type ResultResponse, type Selection, type Step } from "@/components/timeline";
 import { Sidebar } from "@/components/sidebar";
 import { WorkspaceNav } from "@/components/workspace-nav";
@@ -79,7 +79,6 @@ export default function Home() {
 
   useEffect(() => {
     void getUsage().then(setUsage);
-    void getIntegrations(getDeviceId()).then(setIntegrations);
   }, []);
   const ctx = useRef<Context | null>(null);
   const run = useRef(0); // bumps on every new task so stale async work is ignored
@@ -608,7 +607,7 @@ export default function Home() {
         type="module"
         strategy="afterInteractive"
       />
-      <Sidebar usage={usage} />
+      <Sidebar usage={usage} onIntegrationsChange={setIntegrations} />
 
       <section className="main-column" id="top">
         <header className="topbar">

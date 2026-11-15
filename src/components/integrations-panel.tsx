@@ -9,7 +9,11 @@ import {
 import type { IntegrationStatus } from "@/lib/notify";
 import { getDeviceId } from "@/lib/local-tasks";
 
-export function IntegrationsPanel() {
+export function IntegrationsPanel({
+  onStatusChange,
+}: {
+  onStatusChange?: (status: IntegrationStatus) => void;
+}) {
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState("");
@@ -19,17 +23,22 @@ export function IntegrationsPanel() {
   useEffect(() => {
     if (deviceId)
       void getIntegrations(deviceId)
-        .then(setStatus)
-        .catch(() =>
-          setStatus({
+        .then((nextStatus) => {
+          setStatus(nextStatus);
+          onStatusChange?.(nextStatus);
+        })
+        .catch(() => {
+          const fallback: IntegrationStatus = {
             telegram: {
               configured: false,
               connected: false,
               missing: ["Background storage is unavailable"],
             },
-          }),
-        );
-  }, [deviceId]);
+          };
+          setStatus(fallback);
+          onStatusChange?.(fallback);
+        });
+  }, [deviceId, onStatusChange]);
 
   async function connect() {
     setConnecting(true);
@@ -47,7 +56,9 @@ export function IntegrationsPanel() {
     if (res.ok) {
       setMessage(`Connected to ${res.chatName}. Check Telegram for a test message.`);
       setTelegramLink("");
-      setStatus(await getIntegrations(deviceId));
+      const nextStatus = await getIntegrations(deviceId);
+      setStatus(nextStatus);
+      onStatusChange?.(nextStatus);
     } else setMessage(res.error);
   }
 
