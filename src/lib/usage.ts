@@ -48,7 +48,12 @@ type Day = {
 };
 type Ledger = { days: Record<string, Day> };
 
-const FILE = path.join(process.cwd(), ".butler", "usage.json");
+// Vercel's function bundle lives on a read-only filesystem. Keep its best-effort
+// per-instance ledger in writable scratch space; local development stays persistent.
+const DATA_DIR = process.env.VERCEL
+  ? path.join("/tmp", ".butler")
+  : path.join(process.cwd(), ".butler");
+const FILE = path.join(DATA_DIR, "usage.json");
 const emptyDay = (): Day => ({
   exaUsd: 0,
   exaSearches: 0,
